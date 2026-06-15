@@ -60,7 +60,7 @@
     .floor { position:absolute; bottom:0;left:0;right:0; height:8%; background:#0f1520; border-top:3px solid #1e2d45; z-index:2; }
     #crab-group { position:absolute; bottom:8%; z-index:3; }
     #bubble {
-      position:absolute; bottom:calc(8% + 195px);
+      position:absolute; bottom:calc(8% + 145px);
       background:#e8f0ff; color:#111;
       font-size:20px; padding:18px 22px;
       width:340px; white-space:normal; line-height:1.9;
@@ -386,7 +386,7 @@
     <div id="time-item"></div>
     <div id="shooting-star"></div>
     <div id="crab-group">
-      <svg id="crab-svg" width="160" height="178" viewBox="0 0 500 380" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+      <svg id="crab-svg" width="112" height="125" viewBox="0 0 500 380" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
         <g id="cbody">
           <rect fill="#C96A42" x="40" y="0" width="420" height="240"/>
           <g id="eye-l"><rect fill="#1a1a1a" x="110" y="55" width="40" height="75"/></g>
@@ -458,48 +458,48 @@ apikeySave.onclick = () => {
 // ── 固定テキスト（2026年6月 最新ニュース） ──
 const NEWS_SETS_JA=[
   [
-    "Claude Fable 5 正式リリース 🔥",
-    "Anthropic がSECにIPO申請書類を提出",
-    "GPT-5.4 が100万トークン対応で登場",
-    "SiriがGeminiと提携、WWDC 2026発表",
-    "Anthropic「AI開発を一時停止できる仕組みが必要」",
+    "米政府がFable 5/Mythos 5を停止命令 ⚠️",
+    "AnthropicがSECにIPO申請、評価額1兆円規模",
+    "SpaceXがColossus(GPU群)をAnthropicに貸与",
+    "Anthropic「AI開発の一時停止を判断する仕組みが必要」",
+    "Anthropic、Q2に初の営業利益達成見込み",
   ],
   [
-    "Claude Mythos 5 一部ユーザーに公開",
-    "OpenAI 年間収益が250億ドル突破",
-    "Google I/O 2026でGeminiエージェント強化",
-    "Anthropic Agent SDK 新課金体系へ移行",
-    "GPT-5.5・Gemini 3.x・Codestral 競争激化",
+    "Google Gemini 3.5 Pro、200万トークン対応間近",
+    "AnthropicがClaude Partner NetworkにServices Track追加",
+    "TCS・DXCがClaudeを規制業界に導入へ提携",
+    "企業はFable5停止で'ハードウェア主権'志向に",
+    "Colorado州AI法、6/30に施行間近で対応急務",
   ],
   [
-    "Claude Fable 5、6/22まで無料提供中",
-    "NVIDIA×SK hynix 次世代AI半導体で提携",
-    "AIエージェントが実際の業務を自律実行",
-    "Claude Code GitHub Actions 対応強化",
-    "世界AI規制の議論が各国で加速",
+    "OpenAI、Sora動画AIを採算悪化で終了",
+    "米政府がChatGPTでメディケイド不正監査を実施",
+    "NAVER・NVIDIAが韓国にGW級AIファクトリー計画",
+    "世界CIO調査:94%がAI投資増、51%は'進みすぎ'懸念",
+    "Anthropic、ローマ教皇のAI回勅にコメント発表",
   ],
 ];
 const NEWS_SETS_EN=[
   [
-    "Claude Fable 5 officially launched 🔥",
-    "Anthropic confidentially files S-1 for IPO",
-    "GPT-5.4 debuts with 1M token context",
-    "Apple Siri partners with Google Gemini at WWDC",
-    "Anthropic: 'We need option to pause AI development'",
+    "US govt orders Fable 5 / Mythos 5 access suspended ⚠️",
+    "Anthropic confidentially files S-1, nears $1T valuation",
+    "SpaceX rents Colossus GPU cluster to Anthropic",
+    "Anthropic: world needs a system to pause AI development",
+    "Anthropic on track for first operating profit in Q2 2026",
   ],
   [
-    "Claude Mythos 5 rolling out to select users",
-    "OpenAI surpasses $25B annualized revenue",
-    "Google I/O 2026: Gemini enters agentic era",
-    "Anthropic Agent SDK moves to new billing model",
-    "GPT-5.5, Gemini 3.x, Codestral race heats up",
+    "Google Gemini 3.5 Pro nearing 2M token context",
+    "Anthropic adds Services Track to Claude Partner Network",
+    "TCS & DXC partner to bring Claude to regulated industries",
+    "Enterprises pivot to 'hardware sovereignty' after Fable 5 cutoff",
+    "Colorado AI Act enforcement deadline looms June 30",
   ],
   [
-    "Claude Fable 5 free for Pro users until June 22",
-    "NVIDIA & SK hynix partner on next-gen AI memory",
-    "AI agents now executing real autonomous workflows",
-    "Claude Code GitHub Actions support expanded",
-    "Global AI regulation debates accelerating",
+    "OpenAI shuts down Sora video tool amid heavy losses",
+    "US govt uses ChatGPT to audit Medicaid for fraud",
+    "NAVER & NVIDIA plan gigawatt-scale AI factories in Korea",
+    "Global CIO survey: 94% raised AI spend, 51% say too fast",
+    "Anthropic's Chris Olah responds to Pope's AI encyclical",
   ],
 ];
 const TWEETS_JA=["ぷかぷか〜🦀","眠いな…","ハサミ研いどこ","横歩きって楽なんだよね","今日もいい天気だな","お腹すいた〜","ちょっと休憩しよ","ふわふわしてる","Claude 4すごいらしいよ","コンテキストながーい","MCP便利すぎる","エージェントの夢みた","トークンって何味?","GPUほしい","Claudeって優しいよね","プロンプト難しい…","Claude Codeつよい","Opus 4.8すごかった","Notionと連携したい","ビルドおそい…","クラウド代こわい","LLMニュース多すぎ","知識グラフたのしい","ベクトル検索たのしい","チェーンオブソートしてる","AIエージェント時代きた","ハサミでコーディング","横歩きデバッグ中","眠いけどRAG構築","MCPサーバー増えすぎ"];
@@ -564,42 +564,104 @@ function setTicker(){
 
 // ── RSS フィード定義 ──
 const RSS_FEEDS_JA = [
-  { name:'Anthropic',    url:'https://www.anthropic.com/rss.xml' },
+  { name:'Anthropic',    url:'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml' },
   { name:'ITmedia AI',   url:'https://rss.itmedia.co.jp/rss/2.0/aiplus.xml' },
-  { name:'ASCII AI',     url:'https://ascii.jp/rss/ai.xml' },
-  { name:'ZDNet Japan',  url:'https://japan.zdnet.com/category/artificial-intelligence/rss.xml' },
   { name:'TechCrunch',   url:'https://techcrunch.com/category/artificial-intelligence/feed/' },
   { name:'The Verge AI', url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
+  { name:'VentureBeat AI',url:'https://venturebeat.com/category/ai/feed/' },
 ];
 const RSS_FEEDS_EN = [
-  { name:'Anthropic',    url:'https://www.anthropic.com/rss.xml' },
+  { name:'Anthropic',    url:'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml' },
   { name:'TechCrunch AI',url:'https://techcrunch.com/category/artificial-intelligence/feed/' },
   { name:'The Verge AI', url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
   { name:'VentureBeat AI',url:'https://venturebeat.com/category/ai/feed/' },
   { name:'Wired AI',     url:'https://www.wired.com/feed/tag/ai/latest/rss' },
   { name:'MIT Tech Review',url:'https://www.technologyreview.com/feed/' },
 ];
-const RSS2JSON = 'https://api.rss2json.com/v1/api.json?rss_url=';
+// RSS取得用プロキシ（複数フォールバック）
+function rssProxyUrls(feedUrl){
+  return [
+    'https://api.allorigins.win/raw?url='+encodeURIComponent(feedUrl),
+    'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=3',
+    'https://corsproxy.io/?'+encodeURIComponent(feedUrl),
+  ];
+}
+
+// 簡易XMLパーサ：<item>か<entry>からtitle/linkを抜き出す
+function parseRssXml(xmlText){
+  const items=[];
+  try{
+    const parser=new DOMParser();
+    const doc=parser.parseFromString(xmlText,'text/xml');
+    if(doc.querySelector('parsererror')) return items;
+    // RSS 2.0
+    let nodes=doc.querySelectorAll('item');
+    if(nodes.length===0) nodes=doc.querySelectorAll('entry'); // Atom
+    nodes.forEach(node=>{
+      const title=node.querySelector('title')?.textContent?.trim();
+      let link=node.querySelector('link')?.textContent?.trim();
+      if(!link){
+        const linkEl=node.querySelector('link');
+        link=linkEl?.getAttribute('href') || '';
+      }
+      if(title) items.push({ title, link });
+    });
+  }catch(e){}
+  return items;
+}
+
+async function fetchOneFeed(feed){
+  const proxies=rssProxyUrls(feed.url);
+  for(const proxyUrl of proxies){
+    try{
+      const res=await fetch(proxyUrl);
+      if(!res.ok) continue;
+      const text=await res.text();
+      let items=[];
+      // rss2json系はJSON
+      if(proxyUrl.includes('rss2json')){
+        try{
+          const data=JSON.parse(text);
+          if(data.status==='ok' && data.items?.length){
+            items=data.items.map(it=>({title:it.title, link:it.link}));
+          }
+        }catch(e){}
+      } else {
+        // XMLをパース
+        items=parseRssXml(text);
+      }
+      if(items.length>0){
+        return items.slice(0,3).map(it=>({ title:it.title, link:it.link, source:feed.name }));
+      }
+    }catch(e){}
+  }
+  return [];
+}
 
 async function fetchRssNews(){
   const feeds = lang==='ja' ? RSS_FEEDS_JA : RSS_FEEDS_EN;
-  const results = [];
-  // 並列取得で高速化
-  const promises = feeds.map(async feed=>{
-    try{
-      const res = await fetch(RSS2JSON + encodeURIComponent(feed.url) + '&count=2');
-      const data = await res.json();
-      if(data.status==='ok' && data.items?.length){
-        // 各フィードから最新2件まで取得
-        data.items.slice(0,2).forEach(item=>{
-          results.push({ title: item.title, link: item.link, source: feed.name });
-        });
-      }
-    }catch(e){}
-  });
-  await Promise.all(promises);
-  // 最大10件にしてシャッフル
-  return results.sort(()=>Math.random()-0.5).slice(0,10);
+  const promises = feeds.map(feed=>fetchOneFeed(feed));
+  const settled = await Promise.allSettled(promises);
+  let results=[];
+  for(const r of settled){
+    if(r.status==='fulfilled') results=results.concat(r.value);
+  }
+  results = results.sort(()=>Math.random()-0.5);
+
+  // 最低5件を保証：足りない場合は固定セットから補完
+  const MIN_ITEMS = 5;
+  if(results.length < MIN_ITEMS){
+    const sets = lang==='ja' ? NEWS_SETS_JA : NEWS_SETS_EN;
+    const fallbackTitles = sets[newsSetIdx % sets.length];
+    const existingTitles = new Set(results.map(r=>r.title));
+    for(const title of fallbackTitles){
+      if(results.length >= MIN_ITEMS) break;
+      if(existingTitles.has(title)) continue;
+      results.push({ title, link: makeGoogleNewsUrl(title), source: null });
+    }
+  }
+
+  return results.slice(0,10);
 }
 
 async function doReload(){
@@ -895,7 +957,7 @@ function setState(s){
     startJump(); setTimeout(()=>setFace('normal'),600);
   } else if(s==='sleep'){
     bubble.style.display='none'; setFace('sleep');
-    zzz.style.display='block'; zzz.style.left=(x+100)+'px'; zzz.style.bottom='calc(8% + 185px)';
+    zzz.style.display='block'; zzz.style.left=(x+70)+'px'; zzz.style.bottom='calc(8% + 135px)';
     stateTimer=400+Math.random()*300; playSleep();
   }
 }
@@ -1100,6 +1162,7 @@ function renderWeather(){
 }
 
 
+let lastChimeHour = -1;
 function checkChime(){
   const d = new Date();
   const h = d.getHours(), m = d.getMinutes();
@@ -1162,7 +1225,7 @@ function loop(){
   if(state==='walk' || state==='walk_slow'){
     const speed = state==='walk_slow' ? 0.4 : 1.1;
     x+=dir*speed;
-    const maxX=world.clientWidth-170;
+    const maxX=world.clientWidth-120;
     if(x<10){x=10; dir=1;} if(x>maxX){x=maxX; dir=-1;}
     crabGroup.style.left=x+'px';
     crabSvg.style.transform=dir<0?'scaleX(-1)':'scaleX(1)';
@@ -1177,14 +1240,14 @@ function loop(){
   if(state==='sleep'){
     crabGroup.style.left=x+'px';
     crabSvg.style.transform=`rotate(${Math.sin(tick*0.04)*4}deg)`;
-    zzz.style.left=(x+100)+'px';
+    zzz.style.left=(x+70)+'px';
   }
   if(state==='stop'||state==='turn'){
     crabGroup.style.left=x+'px'; updateBubblePos();
   }
   if(state==='jump'){
     x+=dir*1.5; // ジャンプ中も少し前進
-    const maxX=world.clientWidth-170;
+    const maxX=world.clientWidth-120;
     if(x<10){x=10;dir=1;} if(x>maxX){x=maxX;dir=-1;}
     crabGroup.style.left=x+'px'; updateBubblePos();
     clawTick++;
@@ -1198,9 +1261,9 @@ function loop(){
   // 時間帯アイテムをカニの右上に追従表示
   const itemEl = document.getElementById('time-item');
   if(itemEl && itemEl.style.display==='block'){
-    const offsetX = dir<0 ? -20 : 130;
+    const offsetX = dir<0 ? -15 : 90;
     itemEl.style.left = (x+offsetX)+'px';
-    itemEl.style.bottom = 'calc(8% + 175px)';
+    itemEl.style.bottom = 'calc(8% + 125px)';
   }
 
   requestAnimationFrame(loop);
