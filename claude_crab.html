@@ -434,6 +434,7 @@ function playSleep(){ [330,277].forEach((f,i)=>setTimeout(()=>playBeep(f,'triang
 function playType(){ playBeep(180+Math.random()*80,'square',0.03,0.04); }
 function playReply(){ [784,1047].forEach((f,i)=>setTimeout(()=>playBeep(f,'triangle',0.15,0.15),i*100)); }
 function playReload(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>playBeep(f,'square',0.08,0.18),i*60)); }
+function playCancel(){ [330,247].forEach((f,i)=>setTimeout(()=>playBeep(f,'square',0.12,0.18),i*90)); }
 
 // ── APIキー管理 ──
 let groqApiKey = localStorage.getItem('groq_api_key') || '';
@@ -453,27 +454,6 @@ apikeySave.onclick = () => {
   updateApiStatus();
   playDecide();
 };
-
-// ── Groq API呼び出し ──
-async function callGroq(systemPrompt, userMsg, maxTokens=200){
-  if(!groqApiKey) return null;
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions',{
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${groqApiKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        max_tokens: maxTokens,
-        messages:[
-          { role:'system', content: systemPrompt },
-          { role:'user',   content: userMsg }
-        ]
-      })
-    });
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
-  } catch(e){ return null; }
-}
 
 // ── 固定テキスト（2026年6月 最新ニュース） ──
 const NEWS_SETS_JA=[
@@ -559,16 +539,6 @@ function makeGoogleNewsUrl(title){
   const isJa = lang==='ja';
   const base = 'https://news.google.com/search?q='+encodeURIComponent(title);
   return isJa ? base+'&hl=ja&gl=JP&ceid=JP:ja' : base+'&hl=en&gl=US&ceid=US:en';
-}
-
-function setTickerFromRss(items){
-  newsTicker.className=lang==='ja'?'ja':'en';
-  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; return; }
-  tickerInner.innerHTML = items.map(item=>{
-    const url = item.link || makeGoogleNewsUrl(item.title);
-    const label = item.source ? `[${item.source}] ${item.title}` : item.title;
-    return `<a class="news-item" href="${url}" target="_blank" rel="noopener">${label}</a>`;
-  }).join('<span style="color:#ffffff33">   ★   </span>');
 }
 
 function setTickerFromRss(items){
@@ -923,7 +893,6 @@ function setState(s){
     zzz.style.display='none'; setFace('happy');
     stateTimer=120+Math.random()*100;
     startJump(); setTimeout(()=>setFace('normal'),600);
-    setTimeout(()=>setFace('normal'),600);
   } else if(s==='sleep'){
     bubble.style.display='none'; setFace('sleep');
     zzz.style.display='block'; zzz.style.left=(x+100)+'px'; zzz.style.bottom='calc(8% + 185px)';
