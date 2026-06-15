@@ -541,6 +541,19 @@ function makeGoogleNewsUrl(title){
   return isJa ? base+'&hl=ja&gl=JP&ceid=JP:ja' : base+'&hl=en&gl=US&ceid=US:en';
 }
 
+// マーキー速度を内容幅に応じて一定(px/秒)に揃える。
+// keyframe ticker は要素幅の300%(translateX 100%→-200%)を移動するため
+// duration = 3 * scrollWidth / TICKER_SPEED とすると言語・文章長に関わらず同速になる。
+const TICKER_SPEED = 160; // px/秒
+function applyTickerSpeed(){
+  requestAnimationFrame(()=>{
+    const w = tickerInner.scrollWidth;
+    if(!w) return;
+    const dur = (3 * w) / TICKER_SPEED;
+    tickerInner.style.animationDuration = dur.toFixed(1)+'s';
+  });
+}
+
 function setTickerFromRss(items){
   newsTicker.className=lang==='ja'?'ja':'en';
   if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; return; }
@@ -549,6 +562,7 @@ function setTickerFromRss(items){
     const label = item.source ? `[${item.source}]&nbsp;${item.title}` : item.title;
     return `<a class="news-item" href="${url}" target="_blank" rel="noopener">${label}</a>`;
   }).join('<span style="color:#ffffff33">&nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;</span>');
+  applyTickerSpeed();
 }
 
 function setTicker(){
@@ -560,6 +574,7 @@ function setTicker(){
   tickerInner.innerHTML = items.map(title=>
     `<a class="news-item" href="${makeGoogleNewsUrl(title)}" target="_blank" rel="noopener">${title}</a>`
   ).join('<span style="color:#ffffff33">&nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;</span>');
+  applyTickerSpeed();
 }
 
 // ── RSS フィード定義 ──
@@ -638,6 +653,39 @@ async function fetchOneFeed(feed){
   return [];
 }
 
+// 日本語(ひらがな/カタカナ/漢字)を含むか
+function hasJapanese(s){ return /[぀-ヿ㐀-鿿]/.test(s); }
+
+// 英語見出しをGroqで日本語にバッチ翻訳（1リクエストで全件）
+async function translateTitlesToJa(titles){
+  if(!groqApiKey) return titles;
+  // 日本語を含まない見出しだけ翻訳対象
+  const targets = titles.map((t,i)=>({t,i})).filter(o=>!hasJapanese(o.t));
+  if(targets.length===0) return titles;
+  const list = targets.map((o,k)=>`${k+1}. ${o.t}`).join('\n');
+  const sp = '次のAIニュース見出しを自然で簡潔な日本語に翻訳して。固有名詞(Claude/Anthropic/OpenAI/GPT/Gemini等)は原語のまま。各行「番号. 訳文」の形式だけを出力し、余計な説明は書かない。';
+  try{
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
+      body:JSON.stringify({ model:'llama-3.1-8b-instant', max_tokens:800, temperature:0.2,
+        messages:[{role:'system',content:sp},{role:'user',content:list}] })
+    });
+    const data=await res.json();
+    const out=data.choices?.[0]?.message?.content?.trim();
+    if(!out) return titles;
+    // 「番号. 訳文」をパース
+    const map={};
+    out.split('\n').forEach(line=>{
+      const m=line.match(/^\s*(\d+)\s*[.\)、．]\s*(.+)$/);
+      if(m) map[parseInt(m[1],10)]=m[2].trim();
+    });
+    const result=titles.slice();
+    targets.forEach((o,k)=>{ if(map[k+1]) result[o.i]=map[k+1]; });
+    return result;
+  }catch(e){ return titles; }
+}
+
 async function fetchRssNews(){
   const feeds = lang==='ja' ? RSS_FEEDS_JA : RSS_FEEDS_EN;
   const promises = feeds.map(feed=>fetchOneFeed(feed));
@@ -661,7 +709,15 @@ async function fetchRssNews(){
     }
   }
 
-  return results.slice(0,10);
+  results = results.slice(0,10);
+
+  // JPモードかつAPIキーあり：英語見出しを日本語へ翻訳
+  if(lang==='ja' && groqApiKey){
+    const translated = await translateTitlesToJa(results.map(r=>r.title));
+    results.forEach((r,i)=>{ r.title = translated[i]; });
+  }
+
+  return results;
 }
 
 async function doReload(){
