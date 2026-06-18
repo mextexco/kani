@@ -76,9 +76,9 @@
     .zzz { position:absolute; color:#aaaaff; font-size:16px; display:none; pointer-events:none; font-family:'Press Start 2P',monospace; animation:floatZ 1.8s steps(4) infinite; z-index:10; }
     @keyframes floatZ { 0%{opacity:0;transform:translateY(0)} 30%{opacity:1;transform:translateY(-6px)} 70%{opacity:1;transform:translateY(-16px)} 100%{opacity:0;transform:translateY(-24px)} }
     #state-label { position:absolute; top:10px; left:14px; color:#ffffff22; font-size:9px; z-index:10; }
-    #news-ticker { position:absolute; bottom:calc(8% + 2px); left:0; right:0; background:#08081acc; color:#44ffaa; font-size:18px; padding:8px 16px; white-space:nowrap; overflow:hidden; pointer-events:auto; line-height:1.8; border-top:2px solid #1a2a4a; cursor:default; z-index:5; }
+    #news-ticker { position:absolute; bottom:calc(8% + 2px); left:0; right:0; background:#08081acc; color:#44ffaa; font-size:22px; padding:8px 16px; white-space:nowrap; overflow:hidden; pointer-events:auto; line-height:1.8; border-top:2px solid #1a2a4a; cursor:default; z-index:5; }
     #news-ticker.ja { font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; }
-    #news-ticker.en { font-family:'Press Start 2P',monospace; font-size:13px; }
+    #news-ticker.en { font-family:'Press Start 2P',monospace; font-size:16px; }
     #news-ticker-inner { display:inline-block; animation:ticker 50s linear infinite; }
     #news-ticker-inner a.news-item { color:#44ffaa; text-decoration:none; border-bottom:1px dashed #44ffaa66; padding-bottom:1px; cursor:pointer; transition:color 0.15s; }
     #news-ticker-inner a.news-item:hover { color:#ffffff; border-bottom-color:#fff; }
@@ -599,7 +599,7 @@ function setTickerFromRss(items){
     const url = item.link || makeGoogleNewsUrl(item.title);
     const label = item.source ? `[${item.source}]&nbsp;${item.title}` : item.title;
     return `<a class="news-item" href="${url}" target="_blank" rel="noopener">${label}</a>`;
-  }).join('<span style="color:#ffffff33">&nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;</span>');
+  }).join('<span style="color:#ffffff33;padding:0 36px">✦</span>');
   applyTickerSpeed();
 }
 
@@ -611,7 +611,7 @@ function setTicker(){
   const items=sets[newsSetIdx%sets.length];
   tickerInner.innerHTML = items.map(title=>
     `<a class="news-item" href="${makeGoogleNewsUrl(title)}" target="_blank" rel="noopener">${title}</a>`
-  ).join('<span style="color:#ffffff33">&nbsp;&nbsp;&nbsp;&nbsp;✦&nbsp;&nbsp;&nbsp;&nbsp;</span>');
+  ).join('<span style="color:#ffffff33;padding:0 36px">✦</span>');
   applyTickerSpeed();
 }
 
