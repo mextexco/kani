@@ -187,6 +187,32 @@
     #chat-send { background:#0d0d1a; border:none; outline:none; color:#C96A42; font-family:'Press Start 2P',monospace; font-size:12px; padding:12px 18px; cursor:pointer; flex-shrink:0; box-shadow:3px 0 0 #5566aa,0 3px 0 #5566aa,3px 3px 0 #5566aa,-3px 0 0 #222244,0 -3px 0 #222244,-3px -3px 0 #222244; }
     #chat-send:hover { background:#1a1a3a; color:#ffaa44; }
     #chat-send:active { transform:translate(3px,3px); box-shadow:-3px 0 0 #5566aa,0 -3px 0 #5566aa,-3px -3px 0 #5566aa,3px 0 0 #222244,0 3px 0 #222244,3px 3px 0 #222244; }
+    /* ── ニュース一覧パネル ── */
+    #news-panel {
+      display:none; background:#0a0a12;
+      border-top:3px solid #5566aa;
+      max-height:300px; overflow-y:auto;
+      scrollbar-width:thin; scrollbar-color:#334 transparent;
+    }
+    #news-panel::-webkit-scrollbar { width:4px; }
+    #news-panel::-webkit-scrollbar-thumb { background:#334; }
+    #news-panel-header {
+      background:#111128; padding:8px 14px;
+      display:flex; align-items:center; justify-content:space-between;
+      border-bottom:1px solid #2a2a4a; position:sticky; top:0; z-index:1;
+    }
+    #news-panel-header span { color:#aaddff; font-size:11px; }
+    #news-panel-reload { background:none; border:none; color:#44ffcc; font-family:'Press Start 2P',monospace; font-size:11px; cursor:pointer; padding:4px 10px; }
+    #news-panel-reload:hover { color:#88ffee; }
+    #news-panel-reload:disabled { color:#ffffff22; cursor:default; }
+    #news-panel-list { padding:14px 18px; display:flex; flex-direction:column; gap:10px; }
+    a.news-row { display:block; text-decoration:none; background:#10101e; border-left:4px solid #44ffaa; padding:10px 14px; border-radius:0 8px 8px 0; transition:background 0.15s; }
+    a.news-row:hover { background:#16162a; }
+    .news-row-meta { display:flex; gap:10px; align-items:center; margin-bottom:5px; flex-wrap:wrap; }
+    .news-row-source { color:#C96A42; font-size:10px; font-family:'Press Start 2P',monospace; }
+    .news-row-date { color:#ffffff44; font-size:10px; font-family:'Press Start 2P',monospace; }
+    .news-row-title { color:#ccddff; font-family:'M PLUS Rounded 1c',sans-serif; font-size:16px; font-weight:700; line-height:1.6; }
+    #news-panel-empty { color:#ffffff33; font-size:12px; font-family:'Press Start 2P',monospace; text-align:center; padding:30px; }
   </style>
 </head>
 <body>
@@ -225,6 +251,7 @@
     <button class="tbtn" id="refresh-btn">🔄 RELOAD</button>
     <button class="tbtn on" id="mute-btn">♪ ON</button>
     <button class="tbtn" id="log-btn">📋 LOG</button>
+    <button class="tbtn" id="newslist-btn">📰 LIST</button>
     <span id="last-fetch">--:--</span>
     <div id="status-dot"></div>
   </div>
@@ -413,6 +440,17 @@
     </div>
   </div>
 
+  <!-- ニュース一覧パネル -->
+  <div id="news-panel">
+    <div id="news-panel-header">
+      <span>📰 NEWS LIST</span>
+      <button id="news-panel-reload">RELOAD</button>
+    </div>
+    <div id="news-panel-list">
+      <div id="news-panel-empty">ニュース取得中... 🦀</div>
+    </div>
+  </div>
+
   <!-- チャットバー -->
   <div id="chat-bar">
     <span id="chat-prompt">❯</span>
@@ -579,26 +617,32 @@ function setTicker(){
 
 // ── RSS フィード定義 ──
 const RSS_FEEDS_JA = [
-  { name:'Anthropic',    url:'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml' },
-  { name:'ITmedia AI',   url:'https://rss.itmedia.co.jp/rss/2.0/aiplus.xml' },
-  { name:'TechCrunch',   url:'https://techcrunch.com/category/artificial-intelligence/feed/' },
-  { name:'The Verge AI', url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
+  { name:'Anthropic',     url:'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml' },
+  { name:'ITmedia AI',    url:'https://rss.itmedia.co.jp/rss/2.0/aiplus.xml' },
+  { name:'ZDNet Japan AI',url:'https://japan.zdnet.com/category/artificial-intelligence/rss.xml' },
+  { name:'TechCrunch',    url:'https://techcrunch.com/category/artificial-intelligence/feed/' },
+  { name:'The Verge AI',  url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
   { name:'VentureBeat AI',url:'https://venturebeat.com/category/ai/feed/' },
+  { name:'Wired AI',      url:'https://www.wired.com/feed/tag/ai/latest/rss' },
+  { name:'The Decoder',   url:'https://the-decoder.com/feed/' },
+  { name:'MIT Tech Review',url:'https://www.technologyreview.com/feed/' },
 ];
 const RSS_FEEDS_EN = [
-  { name:'Anthropic',    url:'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml' },
-  { name:'TechCrunch AI',url:'https://techcrunch.com/category/artificial-intelligence/feed/' },
-  { name:'The Verge AI', url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
+  { name:'Anthropic',     url:'https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml' },
+  { name:'TechCrunch AI', url:'https://techcrunch.com/category/artificial-intelligence/feed/' },
+  { name:'The Verge AI',  url:'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
   { name:'VentureBeat AI',url:'https://venturebeat.com/category/ai/feed/' },
-  { name:'Wired AI',     url:'https://www.wired.com/feed/tag/ai/latest/rss' },
+  { name:'Wired AI',      url:'https://www.wired.com/feed/tag/ai/latest/rss' },
+  { name:'The Decoder',   url:'https://the-decoder.com/feed/' },
+  { name:'Ars Technica',  url:'https://arstechnica.com/ai/feed/' },
   { name:'MIT Tech Review',url:'https://www.technologyreview.com/feed/' },
 ];
 // RSS取得用プロキシ（複数フォールバック）
 function rssProxyUrls(feedUrl){
   return [
     'https://api.allorigins.win/raw?url='+encodeURIComponent(feedUrl),
-    'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=3',
-    'https://corsproxy.io/?'+encodeURIComponent(feedUrl),
+    'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=10',
+    'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(feedUrl),
   ];
 }
 
@@ -619,7 +663,12 @@ function parseRssXml(xmlText){
         const linkEl=node.querySelector('link');
         link=linkEl?.getAttribute('href') || '';
       }
-      if(title) items.push({ title, link });
+      // 発行日時: RSS2.0=pubDate / Atom=published|updated
+      const dateStr = node.querySelector('pubDate')?.textContent
+        || node.querySelector('published')?.textContent
+        || node.querySelector('updated')?.textContent || '';
+      const ts = dateStr ? Date.parse(dateStr) : NaN;
+      if(title) items.push({ title, link, pubts: isNaN(ts)?null:ts });
     });
   }catch(e){}
   return items;
@@ -638,7 +687,7 @@ async function fetchOneFeed(feed){
         try{
           const data=JSON.parse(text);
           if(data.status==='ok' && data.items?.length){
-            items=data.items.map(it=>({title:it.title, link:it.link}));
+            items=data.items.map(it=>({title:it.title, link:it.link, pubts: it.pubDate?Date.parse(it.pubDate):null}));
           }
         }catch(e){}
       } else {
@@ -646,7 +695,7 @@ async function fetchOneFeed(feed){
         items=parseRssXml(text);
       }
       if(items.length>0){
-        return items.slice(0,3).map(it=>({ title:it.title, link:it.link, source:feed.name }));
+        return items.slice(0,6).map(it=>({ title:it.title, link:it.link, source:feed.name, pubts: (it.pubts ?? null) }));
       }
     }catch(e){}
   }
@@ -668,7 +717,7 @@ async function translateTitlesToJa(titles){
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
-      body:JSON.stringify({ model:'llama-3.1-8b-instant', max_tokens:800, temperature:0.2,
+      body:JSON.stringify({ model:'llama-3.1-8b-instant', max_tokens:1600, temperature:0.2,
         messages:[{role:'system',content:sp},{role:'user',content:list}] })
     });
     const data=await res.json();
@@ -694,10 +743,19 @@ async function fetchRssNews(){
   for(const r of settled){
     if(r.status==='fulfilled') results=results.concat(r.value);
   }
-  results = results.sort(()=>Math.random()-0.5);
+  // 重複排除（タイトル正規化）
+  const seen=new Set();
+  results = results.filter(r=>{
+    const key=(r.title||'').trim().toLowerCase().replace(/\s+/g,' ');
+    if(!key || seen.has(key)) return false;
+    seen.add(key); return true;
+  });
 
-  // 最低5件を保証：足りない場合は固定セットから補完
-  const MIN_ITEMS = 5;
+  // 発行日時の新しい順にソート（日時不明は末尾）
+  results = results.sort((a,b)=>((b.pubts||0)-(a.pubts||0)));
+
+  // 最低件数を保証：足りない場合は固定セットから補完
+  const MIN_ITEMS = 12;
   if(results.length < MIN_ITEMS){
     const sets = lang==='ja' ? NEWS_SETS_JA : NEWS_SETS_EN;
     const fallbackTitles = sets[newsSetIdx % sets.length];
@@ -709,7 +767,7 @@ async function fetchRssNews(){
     }
   }
 
-  results = results.slice(0,10);
+  results = results.slice(0,24);
 
   // JPモードかつAPIキーあり：英語見出しを日本語へ翻訳
   if(lang==='ja' && groqApiKey){
@@ -729,6 +787,7 @@ async function doReload(){
       rssItems = items;
       newsSetIdx++;
       setTickerFromRss(items);
+      refreshNewsListIfOpen();
       lastFetch.textContent=now();
       setFace('surprised');
       showBubble(lang==='ja'?'最新ニュース取得したよ🦀':'got latest news 🦀');
@@ -760,8 +819,69 @@ logBtn.onclick=()=>{
   const open=logPanel.style.display==='block';
   logPanel.style.display=open?'none':'block';
   logBtn.className=open?'tbtn':'tbtn on';
-  if(!open) renderLog();
+  if(!open){
+    document.getElementById('news-panel').style.display='none';
+    document.getElementById('newslist-btn').className='tbtn';
+    renderLog();
+  }
 };
+
+// ── ニュース一覧パネル ──
+const newslistBtn=document.getElementById('newslist-btn');
+const newsPanel=document.getElementById('news-panel');
+const newsPanelList=document.getElementById('news-panel-list');
+const newsPanelReload=document.getElementById('news-panel-reload');
+
+// 発行日時の表示用フォーマット（MM/DD HH:MM）。不明は '--'
+function fmtNewsDate(ts){
+  if(!ts) return '--';
+  const d=new Date(ts);
+  const mo=String(d.getMonth()+1).padStart(2,'0');
+  const da=String(d.getDate()).padStart(2,'0');
+  const hh=String(d.getHours()).padStart(2,'0');
+  const mi=String(d.getMinutes()).padStart(2,'0');
+  return `${mo}/${da} ${hh}:${mi}`;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function renderNewsList(){
+  if(!rssItems || rssItems.length===0){
+    newsPanelList.innerHTML='<div id="news-panel-empty">まだニュースがないよ 🦀</div>';
+    return;
+  }
+  // 発行日時の新しい順（不明は末尾）
+  const items=rssItems.slice().sort((a,b)=>((b.pubts||0)-(a.pubts||0)));
+  newsPanelList.innerHTML=items.map(item=>{
+    const url=item.link||makeGoogleNewsUrl(item.title);
+    const src=item.source?`<span class="news-row-source">[${escapeHtml(item.source)}]</span>`:'';
+    return `<a class="news-row" href="${url}" target="_blank" rel="noopener">`
+      +`<div class="news-row-meta">${src}<span class="news-row-date">${fmtNewsDate(item.pubts)}</span></div>`
+      +`<div class="news-row-title">${escapeHtml(item.title)}</div></a>`;
+  }).join('');
+}
+
+// パネルが開いていれば再描画
+function refreshNewsListIfOpen(){
+  if(newsPanel.style.display==='block') renderNewsList();
+}
+
+// ニュース一覧パネル開閉（ログパネルとは排他）
+newslistBtn.onclick=()=>{
+  playCursor();
+  const open=newsPanel.style.display==='block';
+  newsPanel.style.display=open?'none':'block';
+  newslistBtn.className=open?'tbtn':'tbtn on';
+  if(!open){
+    // 他パネルを閉じる
+    logPanel.style.display='none'; logBtn.className='tbtn';
+    renderNewsList();
+  }
+};
+
+newsPanelReload.onclick=()=>{ doReload(); };
 
 // ログクリア
 logClear.onclick=()=>{
@@ -807,7 +927,7 @@ muteBtn.onclick=()=>{
   if(!muted) playDecide();
 };
 
-langBtn.onclick=()=>{ playCursor(); lang=lang==='ja'?'en':'ja'; langBtn.textContent=lang==='ja'?'🌐 JP':'🌐 EN'; setTicker(); updateBgColor(); updateClock(); renderWeather(); };
+langBtn.onclick=()=>{ playCursor(); lang=lang==='ja'?'en':'ja'; langBtn.textContent=lang==='ja'?'🌐 JP':'🌐 EN'; updateBgColor(); updateClock(); renderWeather(); rssItems=[]; setTicker(); doReload(); };
 newsBtn.onclick=()=>{ playCursor(); newsOn=!newsOn; newsBtn.textContent=newsOn?'📡 NEWS ON':'📡 NEWS OFF'; newsBtn.className=newsOn?'tbtn on':'tbtn'; setTicker(); };
 refreshBtn.onclick=()=>doReload();
 crabSvg.onclick=()=>{ playCrabClick(); setFace('surprised'); setTimeout(()=>setFace('normal'),1500); };
@@ -1265,6 +1385,7 @@ setState('walk');
     rssItems=items;
     setTickerFromRss(items);
     lastFetch.textContent=now();
+    refreshNewsListIfOpen();
   }
 })();
 
