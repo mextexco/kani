@@ -76,13 +76,13 @@
     .zzz { position:absolute; color:#aaaaff; font-size:16px; display:none; pointer-events:none; font-family:'Press Start 2P',monospace; animation:floatZ 1.8s steps(4) infinite; z-index:10; }
     @keyframes floatZ { 0%{opacity:0;transform:translateY(0)} 30%{opacity:1;transform:translateY(-6px)} 70%{opacity:1;transform:translateY(-16px)} 100%{opacity:0;transform:translateY(-24px)} }
     #state-label { position:absolute; top:10px; left:14px; color:#ffffff22; font-size:9px; z-index:10; }
-    #news-ticker { position:absolute; bottom:calc(8% + 2px); left:0; right:0; background:#08081acc; color:#44ffaa; font-size:22px; padding:8px 16px; white-space:nowrap; overflow:hidden; pointer-events:auto; line-height:1.8; border-top:2px solid #1a2a4a; cursor:default; z-index:5; }
+    #news-ticker { display:block; width:100%; background:#08081acc; color:#44ffaa; font-size:22px; padding:8px 16px; white-space:nowrap; overflow:hidden; pointer-events:auto; line-height:1.8; border-top:2px solid #1a2a4a; cursor:default; box-sizing:border-box; }
     #news-ticker.ja { font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; }
     #news-ticker.en { font-family:'Press Start 2P',monospace; font-size:16px; }
-    #news-ticker-inner { display:inline-block; animation:ticker 50s linear infinite; }
+    #news-ticker-inner { display:inline-block; padding-left:100%; }
     #news-ticker-inner a.news-item { color:#44ffaa; text-decoration:none; border-bottom:1px dashed #44ffaa66; padding-bottom:1px; cursor:pointer; transition:color 0.15s; }
     #news-ticker-inner a.news-item:hover { color:#ffffff; border-bottom-color:#fff; }
-    @keyframes ticker { 0%{transform:translateX(100%)} 100%{transform:translateX(-200%)} }
+    @keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-100%)} }
 
     /* ── 天体・雲 ── */
     #sun-moon, #sun-moon-glow, #sky-bg, #stars, #windows {
@@ -186,6 +186,7 @@
     #chat-input::placeholder { color:#ffffff33; font-size:18px; }
     #chat-send { background:#0d0d1a; border:none; outline:none; color:#C96A42; font-family:'Press Start 2P',monospace; font-size:12px; padding:12px 18px; cursor:pointer; flex-shrink:0; box-shadow:3px 0 0 #5566aa,0 3px 0 #5566aa,3px 3px 0 #5566aa,-3px 0 0 #222244,0 -3px 0 #222244,-3px -3px 0 #222244; }
     #chat-send:hover { background:#1a1a3a; color:#ffaa44; }
+    #chat-send:disabled { color:#ffffff22; cursor:default; }
     #chat-send:active { transform:translate(3px,3px); box-shadow:-3px 0 0 #5566aa,0 -3px 0 #5566aa,-3px -3px 0 #5566aa,3px 0 0 #222244,0 3px 0 #222244,3px 3px 0 #222244; }
     /* ── ニュース一覧パネル ── */
     #news-panel {
@@ -224,6 +225,7 @@
     <input id="apikey-input" type="password" placeholder="gsk_xxxxxxxxxxxx"/>
     <button id="apikey-save">SAVE</button>
     <span id="api-status">未設定</span>
+    <span id="app-ver" style="margin-left:auto;color:#ffffff33;font-size:10px"></span>
   </div>
 
   <!-- 現在のステータス -->
@@ -407,7 +409,6 @@
     </svg>
     <div class="floor"></div>
     <div id="state-label"></div>
-    <div id="news-ticker" class="ja"><span id="news-ticker-inner"></span></div>
     <div id="bubble"></div>
     <div class="zzz" id="zzz">Z Z Z</div>
     <div id="time-item"></div>
@@ -428,6 +429,8 @@
       </svg>
     </div>
   </div>
+
+  <div id="news-ticker" class="ja"><span id="news-ticker-inner"></span></div>
 
   <!-- ログパネル -->
   <div id="log-panel">
@@ -460,6 +463,16 @@
 
 </div>
 
+<script src="secret.js"></script>
+<script>
+// news_extra.js は毎回キャッシュを無効化して最新を読む。読み込み後にテロップを再描画。
+(function(){
+  var s=document.createElement('script');
+  s.src='news_extra.js?t='+Date.now();
+  s.onload=function(){ if(window.refreshExtraTicker) window.refreshExtraTicker(); };
+  document.head.appendChild(s);
+})();
+</script>
 <script>
 // ── 音声 ──
 let audioCtx=null;
@@ -475,22 +488,36 @@ function playReload(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>playBeep
 function playCancel(){ [330,247].forEach((f,i)=>setTimeout(()=>playBeep(f,'square',0.12,0.18),i*90)); }
 
 // ── APIキー管理 ──
-let groqApiKey = localStorage.getItem('groq_api_key') || '';
+// キーは secret.js (gitignore対象) の window.GROQ_KEY から読む。localStorage保存済みがあれば優先。
+let groqApiKey = localStorage.getItem('groq_api_key') || (window.GROQ_KEY || '');
 const apikeyInput = document.getElementById('apikey-input');
 const apikeySave  = document.getElementById('apikey-save');
 const apiStatus   = document.getElementById('api-status');
 
-function updateApiStatus(){
-  if(groqApiKey){ apiStatus.textContent='✅ SET'; apiStatus.className='ok'; }
-  else { apiStatus.textContent='未設定'; apiStatus.className=''; }
+// ── バージョン表示（リロードで最新が反映されたか確認用。デプロイ毎に更新する） ──
+const APP_VERSION = 'v2026-08-28.3';
+(function(){ const v=document.getElementById('app-ver'); if(v) v.textContent=APP_VERSION; })();
+
+// APIの実稼働ヘルスを表示に反映。翻訳API呼び出しの結果で更新する。
+function setApiHealth(state, detail){
+  // state: 'unset' | 'idle' | 'ok' | 'error'
+  if(state==='unset'){ apiStatus.textContent='未設定'; apiStatus.className=''; apiStatus.title='GROQ APIキー未設定'; return; }
+  if(state==='idle'){ apiStatus.textContent='🔑 SET（未検証）'; apiStatus.className='ok'; apiStatus.title='キーあり。まだAPI呼び出しなし'; return; }
+  if(state==='ok'){ apiStatus.textContent='✅ OK'; apiStatus.className='ok'; apiStatus.title='翻訳API 正常応答: '+(detail||''); return; }
+  if(state==='error'){ apiStatus.textContent='⚠️ '+(detail||'ERROR'); apiStatus.className='err'; apiStatus.title='翻訳API エラー: '+(detail||''); }
 }
+function updateApiStatus(){ setApiHealth(groqApiKey ? 'idle' : 'unset'); }
 if(groqApiKey) apikeyInput.value = groqApiKey;
 updateApiStatus();
-apikeySave.onclick = () => {
+// 起動時に実APIを1回叩いてヘルスを確定（ニュースが日本語だけで翻訳が走らない場合でも検証される）
+if(groqApiKey){ apiStatus.textContent='⏳ 確認中…'; setTimeout(()=>translateTitlesToJa(['API health check headline.']), 800); }
+apikeySave.onclick = async () => {
   groqApiKey = apikeyInput.value.trim();
   localStorage.setItem('groq_api_key', groqApiKey);
   updateApiStatus();
   playDecide();
+  // 保存直後に実APIを1回叩いて疎通/残量エラーを確認
+  if(groqApiKey){ apiStatus.textContent='⏳ 確認中…'; await translateTitlesToJa(['This is a test headline.']); }
 };
 
 // ── 固定テキスト（2026年6月 最新ニュース） ──
@@ -540,10 +567,10 @@ const NEWS_SETS_EN=[
     "Anthropic's Chris Olah responds to Pope's AI encyclical",
   ],
 ];
-const TWEETS_JA=["ぷかぷか〜🦀","眠いな…","ハサミ研いどこ","横歩きって楽なんだよね","今日もいい天気だな","お腹すいた〜","ちょっと休憩しよ","ふわふわしてる","Claude 4すごいらしいよ","コンテキストながーい","MCP便利すぎる","エージェントの夢みた","トークンって何味?","GPUほしい","Claudeって優しいよね","プロンプト難しい…","Claude Codeつよい","Opus 4.8すごかった","Notionと連携したい","ビルドおそい…","クラウド代こわい","LLMニュース多すぎ","知識グラフたのしい","ベクトル検索たのしい","チェーンオブソートしてる","AIエージェント時代きた","ハサミでコーディング","横歩きデバッグ中","眠いけどRAG構築","MCPサーバー増えすぎ"];
-const TWEETS_EN=["just floating 🦀","sleepy...","sharpening my claws","nice weather today","kinda hungry","time for a break","feeling fluffy","Claude 4 is amazing","context window so long","MCP is so useful","dreamed of agents","what flavor is a token?","need more GPU","Claude is so kind","prompt engineering is hard","Claude Code is powerful","Opus 4.8 impressed me","want Notion integration","build is slow...","cloud costs scary","too much LLM news","knowledge graphs are fun","vector search is fun","chain of thought on","AI agent era is here","coding with claws","debugging sideways","sleepy but building RAG"];
-const REPLIES_JA=["そうだね！🦀","うーん、難しい質問だな","ハサミでちょっと考えてみる","いい感じ！","えっほんとに？","それ気になってた！","わかった！まかせて","ちょっと眠くなってきた…","面白い！もっと教えて","なるほどね〜","Claudeに聞いてみたら？","AIの話だいすき🦀","横歩きしながら考えてる","それはむずかしいな","ぷかぷかしながら考えてみる","ハサミ2本あるから大丈夫","今日はいい質問だな","わかる〜","むずかしいけどたのしい"];
-const REPLIES_EN=["interesting! 🦀","hmm, let me think...","good point!","really? tell me more","I was curious about that too","got it!","getting a bit sleepy...","love AI talk 🦀","sidewalking while thinking","that's tricky...","2 claws, no problem","great question","totally get it","hard but fun"];
+const TWEETS_JA=["ぷかぷか〜🦀","眠いな…","ハサミ研いどこ","横歩きって楽なんだよね","今日もいい天気だな","お腹すいた〜","ちょっと休憩しよ","ふわふわしてる","Claude 4すごいらしいよ","コンテキストながーい","MCP便利すぎる","エージェントの夢みた","トークンって何味?","GPUほしい","Claudeって優しいよね","プロンプト難しい…","Claude Codeつよい","Opus 4.8すごかった","Notionと連携したい","ビルドおそい…","クラウド代こわい","LLMニュース多すぎ","知識グラフたのしい","ベクトル検索たのしい","チェーンオブソートしてる","AIエージェント時代きた","ハサミでコーディング","横歩きデバッグ中","眠いけどRAG構築","MCPサーバー増えすぎ","脱皮したい気分","泡ぶくぶく〜","満潮まだかな","砂にもぐりたい","カニカマは仲間じゃない…","茹でないでね🙏","貝殻あつめてる","波の音きこえる?","塩ゆで反対！","甲羅つやつやにしたい","Fable 5って何者…","ローカルLLMも気になる","ファインチューニングって痛い?","プロンプトは丁寧にね","ハルシネーション見た","埋め込みベクトルおいしそう","GPUクラスタの夢","推論はやくなったね","AGIっていつ来るの?","レイテンシ気になる…","雨の日は甲羅が重い","昼寝が仕事です","泳ぐより歩く派","ハサミでピース✌️","満月の夜は元気でる","今日のタスク：ぷかぷか","バグとカニは夜行性","コミットしてから寝よ","レビュー待ちなう","デプロイは金曜にしない"];
+const TWEETS_EN=["just floating 🦀","sleepy...","sharpening my claws","nice weather today","kinda hungry","time for a break","feeling fluffy","Claude 4 is amazing","context window so long","MCP is so useful","dreamed of agents","what flavor is a token?","need more GPU","Claude is so kind","prompt engineering is hard","Claude Code is powerful","Opus 4.8 impressed me","want Notion integration","build is slow...","cloud costs scary","too much LLM news","knowledge graphs are fun","vector search is fun","chain of thought on","AI agent era is here","coding with claws","debugging sideways","sleepy but building RAG","feel like molting","blub blub bubbles","waiting for high tide","wanna dig in the sand","crab sticks aren't my kin...","please don't boil me 🙏","collecting seashells","hear the waves?","no salt boiling!","polishing my shell","who is Fable 5...","local LLMs look fun","does fine-tuning hurt?","be nice to your prompts","saw a hallucination","embeddings look tasty","dreaming of GPU clusters","inference got faster","when is AGI coming?","latency worries me...","shell feels heavy on rainy days","napping is my job","walking > swimming","peace sign with claws ✌️","full moon gives me power","today's task: floating","bugs and crabs are nocturnal","commit before sleep","waiting for code review","never deploy on Friday"];
+const REPLIES_JA=["そうだね！🦀","うーん、難しい質問だな","ハサミでちょっと考えてみる","いい感じ！","えっほんとに？","それ気になってた！","わかった！まかせて","ちょっと眠くなってきた…","面白い！もっと教えて","なるほどね〜","Claudeに聞いてみたら？","AIの話だいすき🦀","横歩きしながら考えてる","それはむずかしいな","ぷかぷかしながら考えてみる","ハサミ2本あるから大丈夫","今日はいい質問だな","わかる〜","むずかしいけどたのしい","甲羅に刻んでおくね","泡を吹きながら賛成","それカニ的にはアリ","波が引いたら考える","満潮時にもう一回聞いて","脱皮するほど驚いた","ハサミが震えるほど面白い","砂にメモしとく"];
+const REPLIES_EN=["interesting! 🦀","hmm, let me think...","good point!","really? tell me more","I was curious about that too","got it!","getting a bit sleepy...","love AI talk 🦀","sidewalking while thinking","that's tricky...","2 claws, no problem","great question","totally get it","hard but fun","carving that into my shell","bubbling in agreement","crab-approved 🦀","ask me again at high tide","so surprised I almost molted","my claws are tingling","noting that in the sand"];
 
 // ── 状態 ──
 let lang='ja', newsOn=true, newsSetIdx=0;
@@ -580,37 +607,102 @@ function makeGoogleNewsUrl(title){
 }
 
 // マーキー速度を内容幅に応じて一定(px/秒)に揃える。
-// keyframe ticker は要素幅の300%(translateX 100%→-200%)を移動するため
-// duration = 3 * scrollWidth / TICKER_SPEED とすると言語・文章長に関わらず同速になる。
+// padding-left:100%(親幅)で先頭が画面右端の外に置かれ、translateX(0)開始で即テキストが流入。
+// -100%で要素全幅(padding込み)を左へ流し切る＝末尾が画面左に抜けきり一巡完了→休憩(REST)。
+// scrollWidth は padding-left を含むので duration = scrollWidth / TICKER_SPEED で速度一定。
 const TICKER_SPEED = 160; // px/秒
 function applyTickerSpeed(){
   requestAnimationFrame(()=>{
     const w = tickerInner.scrollWidth;
     if(!w) return;
-    const dur = (3 * w) / TICKER_SPEED;
-    tickerInner.style.animationDuration = dur.toFixed(1)+'s';
+    const dur = w / TICKER_SPEED;
+    // 同名アニメは inline を消しても再スタートしないため、none→reflow→再指定で毎回頭から流す。
+    tickerInner.style.animation = 'none';
+    void tickerInner.offsetWidth;
+    tickerInner.style.animation = `ticker ${dur.toFixed(1)}s linear`;
   });
 }
 
+// 全ニュース一巡後の休憩。蟹が「読み終わった」感を出しつつ REST_SEC 秒空けて再開。
+const REST_SEC = 30;
+const REST_MSGS_JA = [
+  '🦀 ぜんぶ読んだ。カニ、砂に潜って休憩する…',
+  '🦀 本日のニュースは完売しました。次の入荷までしばしお待ちを',
+  '🦀 情報を食べ尽くした。腹ごなしに横歩き中…',
+  '🦀 いったん店じまい。カニにも休息が必要なのだ',
+  '🦀 ニュース、以上！ハサミを休めるターン',
+];
+const REST_MSGS_EN = [
+  "🦀 THAT'S ALL THE NEWS. Crab is now buried in the sand...",
+  '🦀 SOLD OUT of headlines. Restocking shortly',
+  '🦀 Ate every byte of news. Off for a little side-walk...',
+  '🦀 Closed for now. Even a crab needs a break',
+];
+let restTimer=null, restCountdown=null;
+function clearRest(){
+  if(restTimer){ clearTimeout(restTimer); restTimer=null; }
+  if(restCountdown){ clearInterval(restCountdown); restCountdown=null; }
+}
+function startRest(){
+  clearRest();
+  tickerInner.style.animation='none';
+  const msgs = lang==='ja' ? REST_MSGS_JA : REST_MSGS_EN;
+  const base = msgs[Math.floor(Math.random()*msgs.length)];
+  let left = REST_SEC;
+  const render=()=>{
+    const tail = lang==='ja' ? `（あと ${left}秒でNEWS再開）` : `(back in ${left}s)`;
+    tickerInner.textContent = `${base}　${tail}`;
+  };
+  render();
+  restCountdown=setInterval(()=>{
+    left--;
+    if(left<=0){ clearInterval(restCountdown); restCountdown=null; }
+    else render();
+  },1000);
+  restTimer=setTimeout(()=>{ clearRest(); tickerInner.style.animation=''; setTicker(); }, REST_SEC*1000);
+}
+// 一巡(アニメ1回)が終わったら休憩へ。NEWS OFF中は何もしない。
+tickerInner.addEventListener('animationend', ()=>{ if(newsOn) startRest(); });
+
+// news_extra.js (Gmail/Calendarスナップショット) をテロップ先頭に混ぜるHTMLを生成。
+// 予定=📅(青)、メール=📧(黄)。RSSニュースはこの後ろに続く。
+function extraTickerHtml(){
+  if(!window.EXTRA) return '';
+  const sep='<span style="color:#ffffff33;padding:0 36px">✦</span>';
+  const parts=[];
+  (EXTRA.events||[]).forEach(e=>{
+    parts.push(`<a class="news-item" href="${escapeHtml(e.url||'#')}" target="_blank" rel="noopener" style="color:#7fdfff;border-bottom-color:#7fdfff66">📅 ${escapeHtml(e.when||'')} ${escapeHtml(e.summary||'')}</a>`);
+  });
+  (EXTRA.mails||[]).forEach(m=>{
+    parts.push(`<a class="news-item" href="${escapeHtml(m.url||'#')}" target="_blank" rel="noopener" style="color:#ffd27f;border-bottom-color:#ffd27f66">📧 [${escapeHtml(m.label||'')}] ${escapeHtml(m.subject||'')}</a>`);
+  });
+  return parts.length ? parts.join(sep)+sep : '';
+}
+
 function setTickerFromRss(items){
+  clearRest();
   newsTicker.className=lang==='ja'?'ja':'en';
-  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; return; }
-  tickerInner.innerHTML = items.map(item=>{
+  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; tickerInner.style.animation='none'; return; }
+  tickerInner.style.animation='';
+  tickerInner.innerHTML = extraTickerHtml() + items.map(item=>{
     const url = item.link || makeGoogleNewsUrl(item.title);
-    const label = item.source ? `[${item.source}]&nbsp;${item.title}` : item.title;
-    return `<a class="news-item" href="${url}" target="_blank" rel="noopener">${label}</a>`;
+    const label = item.source ? `[${escapeHtml(item.source)}]&nbsp;${escapeHtml(item.title)}` : escapeHtml(item.title);
+    const dateStr = item.pubts ? (()=>{const d=new Date(item.pubts);return `(${d.getMonth()+1}/${d.getDate()})`;})() : '';
+    return `<a class="news-item" href="${escapeHtml(url)}" target="_blank" rel="noopener">${label}${dateStr?`<span style="color:#ffffff66;font-size:0.75em;margin-left:6px">${dateStr}</span>`:''}</a>`;
   }).join('<span style="color:#ffffff33;padding:0 36px">✦</span>');
   applyTickerSpeed();
 }
 
 function setTicker(){
+  clearRest();
   newsTicker.className=lang==='ja'?'ja':'en';
-  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; return; }
+  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; tickerInner.style.animation='none'; return; }
   if(rssItems.length>0){ setTickerFromRss(rssItems); return; }
+  tickerInner.style.animation='';
   const sets=lang==='ja'?NEWS_SETS_JA:NEWS_SETS_EN;
   const items=sets[newsSetIdx%sets.length];
-  tickerInner.innerHTML = items.map(title=>
-    `<a class="news-item" href="${makeGoogleNewsUrl(title)}" target="_blank" rel="noopener">${title}</a>`
+  tickerInner.innerHTML = extraTickerHtml() + items.map(title=>
+    `<a class="news-item" href="${escapeHtml(makeGoogleNewsUrl(title))}" target="_blank" rel="noopener">${escapeHtml(title)}</a>`
   ).join('<span style="color:#ffffff33;padding:0 36px">✦</span>');
   applyTickerSpeed();
 }
@@ -678,7 +770,8 @@ async function fetchOneFeed(feed){
   const proxies=rssProxyUrls(feed.url);
   for(const proxyUrl of proxies){
     try{
-      const res=await fetch(proxyUrl);
+      const opt = AbortSignal.timeout ? {signal:AbortSignal.timeout(10000)} : {};
+      const res=await fetch(proxyUrl,opt);
       if(!res.ok) continue;
       const text=await res.text();
       let items=[];
@@ -717,12 +810,24 @@ async function translateTitlesToJa(titles){
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
-      body:JSON.stringify({ model:'llama-3.1-8b-instant', max_tokens:1600, temperature:0.2,
+      body:JSON.stringify({ model:'openai/gpt-oss-20b', max_tokens:1600, temperature:0.2,
         messages:[{role:'system',content:sp},{role:'user',content:list}] })
     });
-    const data=await res.json();
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){
+      // エラー種別を判定して表示に反映
+      const emsg=(data && data.error && (data.error.message||data.error.code)) || '';
+      let label;
+      if(res.status===401 || res.status===403) label='キー無効/権限';
+      else if(res.status===429) label = /quota|credit|billing|insufficient/i.test(emsg) ? 'トークン/クレジット不足' : 'レート制限';
+      else if(res.status>=500) label='Groq側エラー';
+      else label='HTTP '+res.status;
+      setApiHealth('error', label);
+      return titles;
+    }
     const out=data.choices?.[0]?.message?.content?.trim();
-    if(!out) return titles;
+    if(!out){ setApiHealth('error','空応答'); return titles; }
+    setApiHealth('ok', new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
     // 「番号. 訳文」をパース
     const map={};
     out.split('\n').forEach(line=>{
@@ -732,7 +837,7 @@ async function translateTitlesToJa(titles){
     const result=titles.slice();
     targets.forEach((o,k)=>{ if(map[k+1]) result[o.i]=map[k+1]; });
     return result;
-  }catch(e){ return titles; }
+  }catch(e){ setApiHealth('error','接続失敗'); return titles; }
 }
 
 async function fetchRssNews(){
@@ -753,6 +858,11 @@ async function fetchRssNews(){
 
   // 発行日時の新しい順にソート（日時不明は末尾）
   results = results.sort((a,b)=>((b.pubts||0)-(a.pubts||0)));
+
+  // JPモードで翻訳キー未設定なら、英語見出し(日本語を含まない)は除外して和文だけ残す
+  if(lang==='ja' && !groqApiKey){
+    results = results.filter(r=>hasJapanese(r.title||''));
+  }
 
   // 最低件数を保証：足りない場合は固定セットから補完
   const MIN_ITEMS = 12;
@@ -775,23 +885,46 @@ async function fetchRssNews(){
     results.forEach((r,i)=>{ r.title = translated[i]; });
   }
 
+  // 次回起動時の即時表示用にキャッシュ
+  try{ localStorage.setItem('news_cache_'+lang, JSON.stringify({ts:Date.now(), items:results})); }catch(e){}
+
   return results;
 }
 
-async function doReload(){
-  statusDot.className='spin'; refreshBtn.disabled=true; playReload();
+// キャッシュがあれば即座にティッカーへ反映（30分以内のもの）
+function loadNewsCache(){
+  try{
+    const c=JSON.parse(localStorage.getItem('news_cache_'+lang)||'null');
+    if(c && Date.now()-c.ts < 30*60*1000 && c.items?.length){
+      rssItems=c.items;
+      setTickerFromRss(rssItems);
+      refreshNewsListIfOpen();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+let fetchGen=0; // 言語切替連打などで古いリクエスト結果が後から反映されるのを防ぐ
+async function doReload(silent=false){
+  const gen=++fetchGen;
+  statusDot.className='spin'; refreshBtn.disabled=true;
+  if(!silent) playReload();
 
   if(newsOn){
     const items = await fetchRssNews();
+    if(gen!==fetchGen) return; // より新しいリクエストが進行中なら破棄
     if(items.length > 0){
       rssItems = items;
       newsSetIdx++;
       setTickerFromRss(items);
       refreshNewsListIfOpen();
       lastFetch.textContent=now();
-      setFace('surprised');
-      showBubble(lang==='ja'?'最新ニュース取得したよ🦀':'got latest news 🦀');
-      setTimeout(()=>setFace('normal'),1500);
+      if(!silent){
+        setFace('surprised');
+        showBubble(lang==='ja'?'最新ニュース取得したよ🦀':'got latest news 🦀');
+        setTimeout(()=>setFace('normal'),1500);
+      }
       statusDot.className=''; refreshBtn.disabled=false;
       return;
     }
@@ -800,9 +933,11 @@ async function doReload(){
   // RSSが取れなかった場合は固定セットをローテーション
   newsSetIdx++;
   setTicker(); lastFetch.textContent=now();
-  setFace('surprised');
-  showBubble(lang==='ja'?'ニュース更新したよ🦀':'news updated 🦀');
-  setTimeout(()=>setFace('normal'),1500);
+  if(!silent){
+    setFace('surprised');
+    showBubble(lang==='ja'?'ニュース更新したよ🦀':'news updated 🦀');
+    setTimeout(()=>setFace('normal'),1500);
+  }
   statusDot.className=''; refreshBtn.disabled=false;
 }
 
@@ -908,11 +1043,11 @@ function renderLog(){
       <div class="log-time">#${String(i+1).padStart(2,'0')}  ${entry.time}</div>
       <div class="log-user">
         <div class="log-user-label">❯ YOU</div>
-        <div class="log-text">${entry.user}</div>
+        <div class="log-text">${escapeHtml(entry.user)}</div>
       </div>
       <div class="log-crab">
         <div class="log-crab-label">🦀 CLAUDE CRAB</div>
-        <div class="log-text">${entry.crab}</div>
+        <div class="log-text">${escapeHtml(entry.crab)}</div>
       </div>
     </div>
   `).join('');
@@ -927,7 +1062,7 @@ muteBtn.onclick=()=>{
   if(!muted) playDecide();
 };
 
-langBtn.onclick=()=>{ playCursor(); lang=lang==='ja'?'en':'ja'; langBtn.textContent=lang==='ja'?'🌐 JP':'🌐 EN'; updateBgColor(); updateClock(); renderWeather(); rssItems=[]; setTicker(); doReload(); };
+langBtn.onclick=()=>{ playCursor(); lang=lang==='ja'?'en':'ja'; langBtn.textContent=lang==='ja'?'🌐 JP':'🌐 EN'; updateBgColor(); updateClock(); renderWeather(); rssItems=[]; if(!loadNewsCache()) setTicker(); doReload(); };
 newsBtn.onclick=()=>{ playCursor(); newsOn=!newsOn; newsBtn.textContent=newsOn?'📡 NEWS ON':'📡 NEWS OFF'; newsBtn.className=newsOn?'tbtn on':'tbtn'; setTicker(); };
 refreshBtn.onclick=()=>doReload();
 crabSvg.onclick=()=>{ playCrabClick(); setFace('surprised'); setTimeout(()=>setFace('normal'),1500); };
@@ -952,9 +1087,13 @@ function updateBubblePos(){
   bubble.style.left=(x+bubbleW>worldW-10)?Math.max(4,x-bubbleW+160)+'px':(x+10)+'px';
 }
 
+let replyShownAt=0; // 返答吹き出しの表示時刻（最低表示時間の保証用）
+const REPLY_MIN_MS=5000; // この時間内はキー入力・クリック・状態遷移で消さない
+
 function showBubble(msg, type='normal'){
   if(chatLock && type!=='reply') return; // チャットロック中は自動つぶやきを無視
   const isJa=lang==='ja';
+  if(type==='reply') replyShownAt=Date.now();
   bubble.className=(type==='reply'?'reply ':'')+(isJa?'':'en');
   bubble.textContent=msg;
   bubble.style.display='block';
@@ -970,8 +1109,13 @@ function showBubble(msg, type='normal'){
   }
 }
 
+// 返答表示から最低時間が経過しているか
+function replyDismissable(){ return Date.now()-replyShownAt >= REPLY_MIN_MS; }
+
 function unlockOnInput(){
   if(chatLock){
+    // 返答直後は消さない（読む時間を確保）
+    if(bubble.style.display==='block' && bubble.classList.contains('reply') && !replyDismissable()) return;
     chatLock=false;
     if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; }
     bubble.style.display='none';
@@ -982,6 +1126,7 @@ function unlockOnInput(){
 document.addEventListener('keydown', e=>{
   if(e.target===chatInput) return; // 入力欄は別途処理
   if(bubble.style.display==='block' && bubble.classList.contains('reply')){
+    if(!replyDismissable()) return; // 表示直後は消さない
     bubble.style.display='none';
     chatLock=false;
     if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; }
@@ -991,21 +1136,28 @@ document.addEventListener('keydown', e=>{
 document.addEventListener('click', e=>{
   if(e.target===chatSend) return; // SENDボタンは除外
   if(bubble.style.display==='block' && bubble.classList.contains('reply')){
+    if(!replyDismissable()) return; // 表示直後は消さない
     bubble.style.display='none';
     chatLock=false;
     if(autoTimer){ clearTimeout(autoTimer); autoTimer=null; }
   }
 });
 
+let chatPending=false; // 送信連打防止
 async function sendChat(){
-  const msg=chatInput.value.trim(); if(!msg)return;
+  const msg=chatInput.value.trim(); if(!msg||chatPending)return;
+  chatPending=true; chatSend.disabled=true;
   chatInput.value=''; playDecide();
   chatLock=true;
   // カニを止めるだけ（setState('stop')は呼ばない→自動つぶやきが出ない）
-  state='stop'; stateTimer=200;
+  // 返答を読む時間を確保するため長めに停止（約10秒）
+  state='stop'; stateTimer=600;
   setFace('surprised');
   chatHistory.push({role:'user',content:msg});
+  // 履歴は直近20メッセージに制限（トークン節約）
+  if(chatHistory.length>20) chatHistory=chatHistory.slice(-20);
 
+  let reply=null;
   if(groqApiKey){
     const isJa=lang==='ja';
     const sp=isJa
@@ -1020,21 +1172,18 @@ async function sendChat(){
         body:JSON.stringify({ model:'llama-3.1-8b-instant', max_tokens:200, messages })
       });
       const data=await res.json();
-      const reply=data.choices?.[0]?.message?.content?.trim();
-      if(reply){
-        chatHistory.push({role:'assistant',content:reply});
-        addLog(msg, reply);
-        showBubble(reply,'reply'); setFace('normal'); playReply();
-        return;
-      }
+      reply=data.choices?.[0]?.message?.content?.trim() || null;
     }catch(e){}
   }
-  // APIなしフォールバック
-  const replies=lang==='ja'?REPLIES_JA:REPLIES_EN;
-  const reply=replies[Math.floor(Math.random()*replies.length)];
+  // APIなし・失敗時フォールバック
+  if(!reply){
+    const replies=lang==='ja'?REPLIES_JA:REPLIES_EN;
+    reply=replies[Math.floor(Math.random()*replies.length)];
+  }
   chatHistory.push({role:'assistant',content:reply});
   addLog(msg, reply);
   showBubble(reply,'reply'); setFace('normal'); playReply();
+  chatPending=false; chatSend.disabled=false;
 }
 
 function setFace(type){
@@ -1132,7 +1281,9 @@ function setState(s){
     stateTimer=120+Math.random()*100;
     startJump(); setTimeout(()=>setFace('normal'),600);
   } else if(s==='sleep'){
-    bubble.style.display='none'; setFace('sleep');
+    // 返答吹き出しの表示中は消さない
+    if(!(bubble.style.display==='block' && bubble.classList.contains('reply'))) bubble.style.display='none';
+    setFace('sleep');
     zzz.style.display='block'; zzz.style.left=(x+70)+'px'; zzz.style.bottom='calc(8% + 135px)';
     stateTimer=400+Math.random()*300; playSleep();
   }
@@ -1361,7 +1512,7 @@ function checkChime(){
   }, 200);
 }
 
-// 1分ごとにチェック
+// 10秒ごとにチェック（時報・背景色）
 setInterval(checkChime, 10000);
 updateBgColor();
 
@@ -1373,21 +1524,20 @@ setInterval(updateClock, 1000);
 fetchWeather();
 setInterval(fetchWeather, 30*60*1000);
 
-setTicker();
 setState('walk');
 
-// 起動時にRSSを自動取得
-(async ()=>{
-  statusDot.className='spin';
-  const items = await fetchRssNews();
-  statusDot.className='';
-  if(items.length>0){
-    rssItems=items;
-    setTickerFromRss(items);
-    lastFetch.textContent=now();
-    refreshNewsListIfOpen();
-  }
-})();
+// news_extra.js が遅れて読み込まれた場合にテロップ先頭のメール/予定を反映し直す
+window.refreshExtraTicker=function(){
+  if(!newsOn) return;
+  if(rssItems.length>0) setTickerFromRss(rssItems); else setTicker();
+};
+
+// 起動時：キャッシュがあれば即表示 → 裏でRSSを取得して更新
+if(!loadNewsCache()) setTicker();
+doReload(true);
+
+// ニュースは15分ごとに自動更新（サイレント）
+setInterval(()=>{ if(newsOn) doReload(true); }, 15*60*1000);
 
 function loop(){
   tick++; stateTimer--;
