@@ -48,7 +48,7 @@ Claudeの公式マスコット「Claude the Crab」をモチーフにした、�
 
 ### 💬 チャット機能
 - 下部の入力欄からカニに話しかけられる
-- Groq API（`llama-3.1-8b-instant`）でリアルタイム応答
+- Groq API（`openai/gpt-oss-20b`）でリアルタイム応答
 - 日本語IME変換中のEnterキーによる誤送信を防止
 - 返答の吹き出しはキー入力・クリックがあるまで消えない
 - 📋 LOGボタンで会話履歴を確認・クリア可能
@@ -68,7 +68,7 @@ Claudeの公式マスコット「Claude the Crab」をモチーフにした、�
 - **フロントエンド**: 単一HTMLファイル（HTML + CSS + Vanilla JS）
 - **フォント**: Google Fonts（Press Start 2P / M PLUS Rounded 1c）
 - **背景**: SVGによるドット絵の街並み（16:9基調、`preserveAspectRatio="xMidYMid slice"`で画面全体に対応）
-- **チャットAPI**: [Groq API](https://groq.com/)（`llama-3.1-8b-instant`、無料枠あり）
+- **チャットAPI**: [Groq API](https://groq.com/)（`openai/gpt-oss-20b`、無料枠あり）
 - **天気API**: [Open-Meteo](https://open-meteo.com/)（APIキー不要）
 - **ニュースRSS**: rss2json.com経由でCORS回避
 
