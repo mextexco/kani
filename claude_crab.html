@@ -82,6 +82,7 @@
     #news-ticker.ja { font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; }
     #news-ticker.en { font-family:'Press Start 2P',monospace; font-size:16px; }
     #news-ticker-inner { display:inline-block; padding-left:100%; }
+    #news-ticker-inner.static { padding-left:0; }
     #news-ticker-inner a.news-item { color:#44ffaa; text-decoration:none; border-bottom:1px dashed #44ffaa66; padding-bottom:1px; cursor:pointer; transition:color 0.15s; }
     #news-ticker-inner a.news-item:hover { color:#ffffff; border-bottom-color:#fff; }
     @keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-100%)} }
@@ -240,8 +241,8 @@
     <span id="api-status">未設定</span>
     <label style="margin-left:14px">翻訳 ▶</label>
     <select id="tr-provider" title="翻訳エンジン。Sarashinaは serve.py 経由で呼ぶ（キーはサーバー側）">
+      <option value="sar-translate">Sarashina3 translate（既定）</option>
       <option value="groq">Groq gpt-oss-20b</option>
-      <option value="sar-translate">Sarashina3 translate</option>
       <option value="sar-mini">Sarashina3 mini</option>
       <option value="sar-nano">Sarashina3 nano</option>
     </select>
@@ -273,7 +274,7 @@
     <button class="tbtn" id="refresh-btn">🔄 RELOAD</button>
     <button class="tbtn on" id="mute-btn">♪ ON</button>
     <button class="tbtn" id="log-btn">📋 LOG</button>
-    <button class="tbtn" id="newslist-btn">📰 LIST</button>
+    <button class="tbtn" id="newslist-btn" title="ニュース一覧・あとで読む（Lキー）">📰 LIST (L)</button>
     <span id="last-fetch">--:--</span>
     <div id="status-dot"></div>
   </div>
@@ -516,7 +517,7 @@ const APP_VERSION = 'v2026-08-28.3';
 // ── 翻訳エンジン切替（Groq / Sarashina） ──
 // Sarashina は CORS 非対応のため serve.py の中継(/api/sarashina/*)経由。キーはサーバー側(secret.js)にだけ置く。
 const TR_PROVIDERS=['groq','sar-translate','sar-mini','sar-nano'];
-let trProvider=localStorage.getItem('tr_provider'); if(!TR_PROVIDERS.includes(trProvider)) trProvider='groq';
+let trProvider=localStorage.getItem('tr_provider'); if(!TR_PROVIDERS.includes(trProvider)) trProvider='sar-translate'; // 既定: Sarashina3 translate（中継不可時はGroqに代替）
 const trSelect=document.getElementById('tr-provider'); trSelect.value=trProvider;
 const isSarashina=p=>p!=='groq';
 function translatorReady(){ return isSarashina(trProvider) || !!groqApiKey; }
@@ -550,60 +551,13 @@ trSelect.onchange=async()=>{
   if(lang==='ja' && translatorReady()) doReload(true);
 };
 
-// ── 固定テキスト（2026年6月 最新ニュース） ──
-const NEWS_SETS_JA=[
-  [
-    "米政府がFable 5/Mythos 5を停止命令 ⚠️",
-    "AnthropicがSECにIPO申請、評価額1兆円規模",
-    "SpaceXがColossus(GPU群)をAnthropicに貸与",
-    "Anthropic「AI開発の一時停止を判断する仕組みが必要」",
-    "Anthropic、Q2に初の営業利益達成見込み",
-  ],
-  [
-    "Google Gemini 3.5 Pro、200万トークン対応間近",
-    "AnthropicがClaude Partner NetworkにServices Track追加",
-    "TCS・DXCがClaudeを規制業界に導入へ提携",
-    "企業はFable5停止で'ハードウェア主権'志向に",
-    "Colorado州AI法、6/30に施行間近で対応急務",
-  ],
-  [
-    "OpenAI、Sora動画AIを採算悪化で終了",
-    "米政府がChatGPTでメディケイド不正監査を実施",
-    "NAVER・NVIDIAが韓国にGW級AIファクトリー計画",
-    "世界CIO調査:94%がAI投資増、51%は'進みすぎ'懸念",
-    "Anthropic、ローマ教皇のAI回勅にコメント発表",
-  ],
-];
-const NEWS_SETS_EN=[
-  [
-    "US govt orders Fable 5 / Mythos 5 access suspended ⚠️",
-    "Anthropic confidentially files S-1, nears $1T valuation",
-    "SpaceX rents Colossus GPU cluster to Anthropic",
-    "Anthropic: world needs a system to pause AI development",
-    "Anthropic on track for first operating profit in Q2 2026",
-  ],
-  [
-    "Google Gemini 3.5 Pro nearing 2M token context",
-    "Anthropic adds Services Track to Claude Partner Network",
-    "TCS & DXC partner to bring Claude to regulated industries",
-    "Enterprises pivot to 'hardware sovereignty' after Fable 5 cutoff",
-    "Colorado AI Act enforcement deadline looms June 30",
-  ],
-  [
-    "OpenAI shuts down Sora video tool amid heavy losses",
-    "US govt uses ChatGPT to audit Medicaid for fraud",
-    "NAVER & NVIDIA plan gigawatt-scale AI factories in Korea",
-    "Global CIO survey: 94% raised AI spend, 51% say too fast",
-    "Anthropic's Chris Olah responds to Pope's AI encyclical",
-  ],
-];
 const TWEETS_JA=["ぷかぷか〜🦀","眠いな…","ハサミ研いどこ","横歩きって楽なんだよね","今日もいい天気だな","お腹すいた〜","ちょっと休憩しよ","ふわふわしてる","Claude 4すごいらしいよ","コンテキストながーい","MCP便利すぎる","エージェントの夢みた","トークンって何味?","GPUほしい","Claudeって優しいよね","プロンプト難しい…","Claude Codeつよい","Opus 4.8すごかった","Notionと連携したい","ビルドおそい…","クラウド代こわい","LLMニュース多すぎ","知識グラフたのしい","ベクトル検索たのしい","チェーンオブソートしてる","AIエージェント時代きた","ハサミでコーディング","横歩きデバッグ中","眠いけどRAG構築","MCPサーバー増えすぎ","脱皮したい気分","泡ぶくぶく〜","満潮まだかな","砂にもぐりたい","カニカマは仲間じゃない…","茹でないでね🙏","貝殻あつめてる","波の音きこえる?","塩ゆで反対！","甲羅つやつやにしたい","Fable 5って何者…","ローカルLLMも気になる","ファインチューニングって痛い?","プロンプトは丁寧にね","ハルシネーション見た","埋め込みベクトルおいしそう","GPUクラスタの夢","推論はやくなったね","AGIっていつ来るの?","レイテンシ気になる…","雨の日は甲羅が重い","昼寝が仕事です","泳ぐより歩く派","ハサミでピース✌️","満月の夜は元気でる","今日のタスク：ぷかぷか","バグとカニは夜行性","コミットしてから寝よ","レビュー待ちなう","デプロイは金曜にしない"];
 const TWEETS_EN=["just floating 🦀","sleepy...","sharpening my claws","nice weather today","kinda hungry","time for a break","feeling fluffy","Claude 4 is amazing","context window so long","MCP is so useful","dreamed of agents","what flavor is a token?","need more GPU","Claude is so kind","prompt engineering is hard","Claude Code is powerful","Opus 4.8 impressed me","want Notion integration","build is slow...","cloud costs scary","too much LLM news","knowledge graphs are fun","vector search is fun","chain of thought on","AI agent era is here","coding with claws","debugging sideways","sleepy but building RAG","feel like molting","blub blub bubbles","waiting for high tide","wanna dig in the sand","crab sticks aren't my kin...","please don't boil me 🙏","collecting seashells","hear the waves?","no salt boiling!","polishing my shell","who is Fable 5...","local LLMs look fun","does fine-tuning hurt?","be nice to your prompts","saw a hallucination","embeddings look tasty","dreaming of GPU clusters","inference got faster","when is AGI coming?","latency worries me...","shell feels heavy on rainy days","napping is my job","walking > swimming","peace sign with claws ✌️","full moon gives me power","today's task: floating","bugs and crabs are nocturnal","commit before sleep","waiting for code review","never deploy on Friday"];
 const REPLIES_JA=["そうだね！🦀","うーん、難しい質問だな","ハサミでちょっと考えてみる","いい感じ！","えっほんとに？","それ気になってた！","わかった！まかせて","ちょっと眠くなってきた…","面白い！もっと教えて","なるほどね〜","Claudeに聞いてみたら？","AIの話だいすき🦀","横歩きしながら考えてる","それはむずかしいな","ぷかぷかしながら考えてみる","ハサミ2本あるから大丈夫","今日はいい質問だな","わかる〜","むずかしいけどたのしい","甲羅に刻んでおくね","泡を吹きながら賛成","それカニ的にはアリ","波が引いたら考える","満潮時にもう一回聞いて","脱皮するほど驚いた","ハサミが震えるほど面白い","砂にメモしとく"];
 const REPLIES_EN=["interesting! 🦀","hmm, let me think...","good point!","really? tell me more","I was curious about that too","got it!","getting a bit sleepy...","love AI talk 🦀","sidewalking while thinking","that's tricky...","2 claws, no problem","great question","totally get it","hard but fun","carving that into my shell","bubbling in agreement","crab-approved 🦀","ask me again at high tide","so surprised I almost molted","my claws are tingling","noting that in the sand"];
 
 // ── 状態 ──
-let lang='ja', newsOn=true, newsSetIdx=0;
+let lang='ja', newsOn=true, newsSetIdx=0, newsStatusMsg='', retryTimer=null, retryCount=0;
 let x=150, dir=1, state='walk', stateTimer=100;
 let tick=0, clawTick=0, tweetIdx=0, autoTimer=null, firstMessage=true;
 let chatHistory=[];
@@ -625,6 +579,8 @@ const lastFetch=document.getElementById('last-fetch');
 const statusDot=document.getElementById('status-dot');
 const tickerInner=document.getElementById('news-ticker-inner');
 const newsTicker=document.getElementById('news-ticker');
+// 静止メッセージ(NEWS OFF/休憩/取得失敗)は、流れ込み用の左余白(padding-left:100%)を外して画面内に出す
+function staticTicker(text){ tickerInner.classList.add('static'); tickerInner.style.animation='none'; tickerInner.textContent=text; }
 
 // ── あとで読む（ティッカーのクリックで保存。localStorage、この端末のブラウザ限り） ──
 const SAVED_KEY='news_saved_v1', SAVED_MAX=100;
@@ -669,6 +625,14 @@ document.addEventListener('keydown', e=>{
   e.preventDefault();
   spaceRate = e.shiftKey ? 1/3 : 0;
   kickBrake();
+});
+// L キーで NEWS LIST パネルを開閉（入力中・修飾キー併用時は無視）
+document.addEventListener('keydown', e=>{
+  if(e.code!=='KeyL' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  const el=e.target;
+  if(el && el.closest && el.closest('input,textarea,select,[contenteditable]')) return;
+  e.preventDefault();
+  newslistBtn.click();
 });
 document.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceRate=1; kickBrake(); } });
 window.addEventListener('blur', ()=>{ spaceRate=1; hoverStop=false; kickBrake(); });
@@ -721,7 +685,7 @@ function startRest(){
   let left = REST_SEC;
   const render=()=>{
     const tail = lang==='ja' ? `（あと ${left}秒でNEWS再開）` : `(back in ${left}s)`;
-    tickerInner.textContent = `${base}　${tail}`;
+    staticTicker(`${base}　${tail}`);
   };
   render();
   restCountdown=setInterval(()=>{
@@ -737,7 +701,8 @@ tickerInner.addEventListener('animationend', ()=>{ if(newsOn) startRest(); });
 function setTickerFromRss(items){
   clearRest();
   newsTicker.className=lang==='ja'?'ja':'en';
-  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; tickerInner.style.animation='none'; return; }
+  if(!newsOn){ staticTicker('📡 NEWS OFF'); return; }
+  tickerInner.classList.remove('static');
   tickerInner.style.animation='';
   tickerInner.innerHTML = items.map(item=>{
     const url = item.link || makeGoogleNewsUrl(item.title);
@@ -752,15 +717,9 @@ function setTickerFromRss(items){
 function setTicker(){
   clearRest();
   newsTicker.className=lang==='ja'?'ja':'en';
-  if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; tickerInner.style.animation='none'; return; }
+  if(!newsOn){ staticTicker('📡 NEWS OFF'); return; }
   if(rssItems.length>0){ setTickerFromRss(rssItems); return; }
-  tickerInner.style.animation='';
-  const sets=lang==='ja'?NEWS_SETS_JA:NEWS_SETS_EN;
-  const items=sets[newsSetIdx%sets.length];
-  tickerInner.innerHTML = items.map(title=>
-    `<a class="news-item" href="${escapeHtml(makeGoogleNewsUrl(title))}" target="_blank" rel="noopener">${escapeHtml(title)}</a>`
-  ).join('<span style="color:#ffffff33;padding:0 56px">✦</span>');
-  applyTickerSpeed();
+  staticTicker(newsStatusMsg || (lang==='ja' ? '📡 ニュース取得中…' : '📡 loading news…'));
 }
 
 // ── RSS フィード定義 ──
@@ -957,19 +916,6 @@ async function fetchRssNews(){
     results = results.filter(r=>hasJapanese(r.title||''));
   }
 
-  // 最低件数を保証：足りない場合は固定セットから補完
-  const MIN_ITEMS = 12;
-  if(results.length < MIN_ITEMS){
-    const sets = lang==='ja' ? NEWS_SETS_JA : NEWS_SETS_EN;
-    const fallbackTitles = sets[newsSetIdx % sets.length];
-    const existingTitles = new Set(results.map(r=>r.title));
-    for(const title of fallbackTitles){
-      if(results.length >= MIN_ITEMS) break;
-      if(existingTitles.has(title)) continue;
-      results.push({ title, link: makeGoogleNewsUrl(title), source: null });
-    }
-  }
-
   results = results.slice(0,24);
 
   // JPモードかつAPIキーあり：英語見出しを日本語へ翻訳
@@ -988,6 +934,20 @@ async function fetchRssNews(){
 }
 
 // キャッシュがあれば即座にティッカーへ反映（30分以内のもの）
+// 取得失敗時の代替：直近の取得結果を鮮度に関係なく(24時間以内)使う。見出しの日付で古さが分かる。
+function loadStaleNewsCache(){
+  try{
+    const c=JSON.parse(localStorage.getItem('news_cache_'+lang)||'null');
+    if(c && Date.now()-c.ts < 24*60*60*1000 && c.items?.length) return c.items;
+  }catch(e){}
+  return null;
+}
+function scheduleNewsRetry(){
+  clearTimeout(retryTimer);
+  const wait=Math.min(60*1000*Math.pow(2,retryCount), 5*60*1000); // 1分→2分→4分→5分
+  retryCount++;
+  retryTimer=setTimeout(()=>{ if(newsOn) doReload(true); }, wait);
+}
 function loadNewsCache(){
   try{
     const c=JSON.parse(localStorage.getItem('news_cache_'+lang)||'null');
@@ -1013,6 +973,7 @@ async function doReload(silent=false){
     if(items.length > 0){
       rssItems = items;
       newsSetIdx++;
+      newsStatusMsg=''; retryCount=0; clearTimeout(retryTimer);
       setTickerFromRss(items);
       refreshNewsListIfOpen();
       lastFetch.textContent=now();
@@ -1026,12 +987,14 @@ async function doReload(silent=false){
     }
   }
 
-  // RSSが取れなかった場合は固定セットをローテーション
-  newsSetIdx++;
-  setTicker(); lastFetch.textContent=now();
+  // RSSが取れなかった：古い固定ニュースは出さない。直近の取得結果があればそれを、無ければ失敗を明示して再試行する。
+  const stale=loadStaleNewsCache();
+  if(stale){ if(rssItems.length===0) rssItems=stale; newsStatusMsg=''; setTickerFromRss(rssItems); refreshNewsListIfOpen(); }
+  else{ newsStatusMsg = lang==='ja' ? '⚠️ ニュースを取得できなかった（自動で再試行する）' : '⚠️ could not load news (retrying)'; setTicker(); }
+  scheduleNewsRetry();
   if(!silent){
     setFace('surprised');
-    showBubble(lang==='ja'?'ニュース更新したよ🦀':'news updated 🦀');
+    showBubble(lang==='ja'?(stale?'取得失敗…前回のニュースを表示中🦀':'ニュース取れなかった…再試行するね🦀'):(stale?'fetch failed - showing last news 🦀':'news failed - will retry 🦀'));
     setTimeout(()=>setFace('normal'),1500);
   }
   statusDot.className=''; refreshBtn.disabled=false;
@@ -1115,7 +1078,7 @@ function showSaveToast(msg){
 function updateSavedUI(){
   const n=savedItems.length;
   savedCount.textContent=n?`(${n})`:'';
-  newslistBtn.textContent = n ? `📰 LIST 📌${n}` : '📰 LIST';
+  newslistBtn.textContent = n ? `📰 LIST (L) 📌${n}` : '📰 LIST (L)';
 }
 function syncTickerSaved(){
   tickerInner.querySelectorAll('a.news-item').forEach(a=>a.classList.toggle('saved', isSaved(a.href)));
