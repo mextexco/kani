@@ -489,6 +489,7 @@
 </div>
 
 <script src="secret.js"></script>
+<script src="crab_lines.js"></script>
 <script>
 // ── 音声 ──
 let audioCtx=null;
@@ -551,14 +552,26 @@ trSelect.onchange=async()=>{
   if(lang==='ja' && translatorReady()) doReload(true);
 };
 
-const TWEETS_JA=["ぷかぷか〜🦀","眠いな…","ハサミ研いどこ","横歩きって楽なんだよね","今日もいい天気だな","お腹すいた〜","ちょっと休憩しよ","ふわふわしてる","Claude 4すごいらしいよ","コンテキストながーい","MCP便利すぎる","エージェントの夢みた","トークンって何味?","GPUほしい","Claudeって優しいよね","プロンプト難しい…","Claude Codeつよい","Opus 4.8すごかった","Notionと連携したい","ビルドおそい…","クラウド代こわい","LLMニュース多すぎ","知識グラフたのしい","ベクトル検索たのしい","チェーンオブソートしてる","AIエージェント時代きた","ハサミでコーディング","横歩きデバッグ中","眠いけどRAG構築","MCPサーバー増えすぎ","脱皮したい気分","泡ぶくぶく〜","満潮まだかな","砂にもぐりたい","カニカマは仲間じゃない…","茹でないでね🙏","貝殻あつめてる","波の音きこえる?","塩ゆで反対！","甲羅つやつやにしたい","Fable 5って何者…","ローカルLLMも気になる","ファインチューニングって痛い?","プロンプトは丁寧にね","ハルシネーション見た","埋め込みベクトルおいしそう","GPUクラスタの夢","推論はやくなったね","AGIっていつ来るの?","レイテンシ気になる…","雨の日は甲羅が重い","昼寝が仕事です","泳ぐより歩く派","ハサミでピース✌️","満月の夜は元気でる","今日のタスク：ぷかぷか","バグとカニは夜行性","コミットしてから寝よ","レビュー待ちなう","デプロイは金曜にしない"];
-const TWEETS_EN=["just floating 🦀","sleepy...","sharpening my claws","nice weather today","kinda hungry","time for a break","feeling fluffy","Claude 4 is amazing","context window so long","MCP is so useful","dreamed of agents","what flavor is a token?","need more GPU","Claude is so kind","prompt engineering is hard","Claude Code is powerful","Opus 4.8 impressed me","want Notion integration","build is slow...","cloud costs scary","too much LLM news","knowledge graphs are fun","vector search is fun","chain of thought on","AI agent era is here","coding with claws","debugging sideways","sleepy but building RAG","feel like molting","blub blub bubbles","waiting for high tide","wanna dig in the sand","crab sticks aren't my kin...","please don't boil me 🙏","collecting seashells","hear the waves?","no salt boiling!","polishing my shell","who is Fable 5...","local LLMs look fun","does fine-tuning hurt?","be nice to your prompts","saw a hallucination","embeddings look tasty","dreaming of GPU clusters","inference got faster","when is AGI coming?","latency worries me...","shell feels heavy on rainy days","napping is my job","walking > swimming","peace sign with claws ✌️","full moon gives me power","today's task: floating","bugs and crabs are nocturnal","commit before sleep","waiting for code review","never deploy on Friday"];
-const REPLIES_JA=["そうだね！🦀","うーん、難しい質問だな","ハサミでちょっと考えてみる","いい感じ！","えっほんとに？","それ気になってた！","わかった！まかせて","ちょっと眠くなってきた…","面白い！もっと教えて","なるほどね〜","Claudeに聞いてみたら？","AIの話だいすき🦀","横歩きしながら考えてる","それはむずかしいな","ぷかぷかしながら考えてみる","ハサミ2本あるから大丈夫","今日はいい質問だな","わかる〜","むずかしいけどたのしい","甲羅に刻んでおくね","泡を吹きながら賛成","それカニ的にはアリ","波が引いたら考える","満潮時にもう一回聞いて","脱皮するほど驚いた","ハサミが震えるほど面白い","砂にメモしとく"];
-const REPLIES_EN=["interesting! 🦀","hmm, let me think...","good point!","really? tell me more","I was curious about that too","got it!","getting a bit sleepy...","love AI talk 🦀","sidewalking while thinking","that's tricky...","2 claws, no problem","great question","totally get it","hard but fun","carving that into my shell","bubbling in agreement","crab-approved 🦀","ask me again at high tide","so surprised I almost molted","my claws are tingling","noting that in the sand"];
+
+const TWEETS_JA=window.TWEETS_JA||['ぷかぷか〜🦀'], TWEETS_EN=window.TWEETS_EN||['just floating 🦀'];
+const REPLIES_JA=window.REPLIES_JA||['そうだね！🦀'], REPLIES_EN=window.REPLIES_EN||['interesting! 🦀'];
 
 // ── 状態 ──
 let lang='ja', newsOn=true, newsSetIdx=0, newsStatusMsg='', retryTimer=null, retryCount=0;
 let x=150, dir=1, state='walk', stateTimer=100;
+// 重複なしのシャッフル順で出す(全部出たら再シャッフル。切れ目で同じ台詞が連続しない)
+const tweetBags=new Map();
+function nextTweet(list){
+  let bag=tweetBags.get(list);
+  if(!bag || bag.i>=bag.order.length){
+    const order=list.map((_,i)=>i);
+    for(let i=order.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
+    if(bag && order[0]===bag.last && order.length>1){ const k=1+Math.floor(Math.random()*(order.length-1)); [order[0],order[k]]=[order[k],order[0]]; }
+    bag={order,i:0,last:bag?bag.last:-1}; tweetBags.set(list,bag);
+  }
+  bag.last=bag.order[bag.i++];
+  return list[bag.last];
+}
 let tick=0, clawTick=0, tweetIdx=0, autoTimer=null, firstMessage=true;
 let chatHistory=[];
 let chatLock=false;
@@ -1407,7 +1420,7 @@ function setState(s){
     stateTimer=200+Math.random()*200;
     const tweets=lang==='ja'?TWEETS_JA:TWEETS_EN;
     if(firstMessage){ playBeep(523,'square',0.1,0.15); firstMessage=false; }
-    showBubble(tweets[tweetIdx++%tweets.length]);
+    showBubble(nextTweet(tweets));
     const stopFaces=['normal','normal','happy','sleepy','surprised'];
     setFace(stopFaces[Math.floor(Math.random()*stopFaces.length)]);
     setTimeout(()=>setFace('normal'),2500);
