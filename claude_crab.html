@@ -28,6 +28,7 @@
       box-shadow: 2px 0 0 #5566aa,0 2px 0 #5566aa,2px 2px 0 #5566aa,-2px 0 0 #222244,0 -2px 0 #222244,-2px -2px 0 #222244;
     }
     #apikey-save:hover { background: #1a1a3a; }
+    #tr-provider { background:#10101e; color:#ccddff; border:1px solid #334; font-family:inherit; font-size:11px; padding:3px 6px; }
     #api-status { font-size: 11px; color: #ffffff44; }
     #api-status.ok { color: #44ff88; }
     #api-status.err { color: #ff6666; }
@@ -224,6 +225,7 @@
     .saved-del:hover { color:#ffaaaa; }
     #news-ticker-inner a.news-item.saved { color:#ffd27f; border-bottom-color:#ffd27f66; }
     #save-toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:#111128; color:#ffd27f; border:2px solid #ffd27f; padding:8px 16px; font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; font-size:14px; z-index:50; display:none; pointer-events:none; max-width:80vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .news-row-orig { color:#ffffff44; font-family:'M PLUS Rounded 1c',sans-serif; font-size:12px; margin-top:4px; line-height:1.4; }
     #news-panel-empty { color:#ffffff33; font-size:12px; font-family:'Press Start 2P',monospace; text-align:center; padding:30px; }
   </style>
 </head>
@@ -236,6 +238,13 @@
     <input id="apikey-input" type="password" placeholder="gsk_xxxxxxxxxxxx"/>
     <button id="apikey-save">SAVE</button>
     <span id="api-status">未設定</span>
+    <label style="margin-left:14px">翻訳 ▶</label>
+    <select id="tr-provider" title="翻訳エンジン。Sarashinaは serve.py 経由で呼ぶ（キーはサーバー側）">
+      <option value="groq">Groq gpt-oss-20b</option>
+      <option value="sar-translate">Sarashina3 translate</option>
+      <option value="sar-mini">Sarashina3 mini</option>
+      <option value="sar-nano">Sarashina3 nano</option>
+    </select>
     <span id="app-ver" style="margin-left:auto;color:#ffffff33;font-size:10px"></span>
   </div>
 
@@ -504,6 +513,14 @@ const apiStatus   = document.getElementById('api-status');
 const APP_VERSION = 'v2026-08-28.3';
 (function(){ const v=document.getElementById('app-ver'); if(v) v.textContent=APP_VERSION; })();
 
+// ── 翻訳エンジン切替（Groq / Sarashina） ──
+// Sarashina は CORS 非対応のため serve.py の中継(/api/sarashina/*)経由。キーはサーバー側(secret.js)にだけ置く。
+const TR_PROVIDERS=['groq','sar-translate','sar-mini','sar-nano'];
+let trProvider=localStorage.getItem('tr_provider'); if(!TR_PROVIDERS.includes(trProvider)) trProvider='groq';
+const trSelect=document.getElementById('tr-provider'); trSelect.value=trProvider;
+const isSarashina=p=>p!=='groq';
+function translatorReady(){ return isSarashina(trProvider) || !!groqApiKey; }
+
 // APIの実稼働ヘルスを表示に反映。翻訳API呼び出しの結果で更新する。
 function setApiHealth(state, detail){
   // state: 'unset' | 'idle' | 'ok' | 'error'
@@ -512,18 +529,24 @@ function setApiHealth(state, detail){
   if(state==='ok'){ apiStatus.textContent='✅ OK'; apiStatus.className='ok'; apiStatus.title='翻訳API 正常応答: '+(detail||''); return; }
   if(state==='error'){ apiStatus.textContent='⚠️ '+(detail||'ERROR'); apiStatus.className='err'; apiStatus.title='翻訳API エラー: '+(detail||''); }
 }
-function updateApiStatus(){ setApiHealth(groqApiKey ? 'idle' : 'unset'); }
+function updateApiStatus(){ setApiHealth(translatorReady() ? 'idle' : 'unset'); }
 if(groqApiKey) apikeyInput.value = groqApiKey;
 updateApiStatus();
 // 起動時に実APIを1回叩いてヘルスを確定（ニュースが日本語だけで翻訳が走らない場合でも検証される）
-if(groqApiKey){ apiStatus.textContent='⏳ 確認中…'; setTimeout(()=>translateTitlesToJa(['API health check headline.']), 800); }
+if(translatorReady()){ apiStatus.textContent='⏳ 確認中…'; setTimeout(()=>translateTitlesToJa(['API health check headline.']), 800); }
 apikeySave.onclick = async () => {
   groqApiKey = apikeyInput.value.trim();
   localStorage.setItem('groq_api_key', groqApiKey);
   updateApiStatus();
   playDecide();
   // 保存直後に実APIを1回叩いて疎通/残量エラーを確認
-  if(groqApiKey){ apiStatus.textContent='⏳ 確認中…'; await translateTitlesToJa(['This is a test headline.']); }
+  if(translatorReady()){ apiStatus.textContent='⏳ 確認中…'; await translateTitlesToJa(['This is a test headline.']); }
+};
+trSelect.onchange=async()=>{
+  trProvider=trSelect.value; try{ localStorage.setItem('tr_provider',trProvider); }catch(e){}
+  updateApiStatus(); playDecide();
+  try{ localStorage.removeItem('news_cache_ja'); }catch(e){}
+  if(lang==='ja' && translatorReady()){ apiStatus.textContent='⏳ 確認中…'; await doReload(true); }
 };
 
 // ── 固定テキスト（2026年6月 最新ニュース） ──
@@ -833,20 +856,45 @@ function hasJapanese(s){ return /[぀-ヿ㐀-鿿]/.test(s); }
 // 英語見出しをGroqで日本語にバッチ翻訳（1リクエストで全件）。
 // 推論型モデルは思考でトークンを使い切ると本文が空/途中切れになるため、推論を抑えて枠に余裕を持たせる。
 // 訳せなかった見出しは1回だけ再試行し、それでも残るものは呼び出し側で除外する。
-async function translateBatch(list){
+async function translateBatch(list, provider=trProvider){
+  const label429 = isSarashina(provider) ? 'レート制限(Sarashina無料枠)' : null;
+  // Sarashina: 翻訳専用エンドポイント（行ごとに対応）
+  if(provider==='sar-translate'){
+    let res; try{ res=await fetch('/api/sarashina/translate',{ method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ text:list.join('\n'), source_lang:'en', target_lang:'ja' }) }); }catch(e){ setApiHealth('error','中継なし(serve.py)'); return null; }
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){ setApiHealth('error', res.status===429 ? label429 : res.status===503 ? 'Sarashinaキー未設定' : res.status===404 ? '中継なし(serve.py)' : 'Sarashina HTTP '+res.status); return null; }
+    const lines=String(data.translated_text||'').split('\n').map(x=>x.trim()).filter(x=>x.length);
+    if(lines.length!==list.length){ setApiHealth('error','行数不一致'); return null; }
+    setApiHealth('ok', 'Sarashina translate '+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
+    const m={}; lines.forEach((x,i)=>{ m[i+1]=x; }); return m;
+  }
+  // チャット形式（Groq直 / Sarashina mini・nano は中継経由）
   const sp = '次のAIニュース見出しを自然で簡潔な日本語に翻訳して。固有名詞(Claude/Anthropic/OpenAI/GPT/Gemini等)は原語のまま。必ず日本語に訳し、英語のまま出力しない。各行「番号. 訳文」の形式だけを出力し、余計な説明は書かない。';
-  const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
-    body:JSON.stringify({ model:'openai/gpt-oss-20b', max_tokens:2500, temperature:0.2, reasoning_effort:'low',
-      messages:[{role:'system',content:sp},{role:'user',content:list.map((t,k)=>`${k+1}. ${t}`).join('\n')}] })
-  });
+  const messages=[{role:'system',content:sp},{role:'user',content:list.map((t,k)=>`${k+1}. ${t}`).join('\n')}];
+  let res;
+  try{
+    if(provider==='groq'){
+      res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
+        body:JSON.stringify({ model:'openai/gpt-oss-20b', max_tokens:2500, temperature:0.2, reasoning_effort:'low', messages })
+      });
+    }else{
+      res=await fetch('/api/sarashina/chat/completions',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ model: provider==='sar-nano' ? 'sarashina3-nano' : 'sarashina3-mini', temperature:0.2, messages })
+      });
+    }
+  }catch(e){ setApiHealth('error', isSarashina(provider) ? '中継なし(serve.py)' : '接続失敗'); return null; }
   const data=await res.json().catch(()=>({}));
   if(!res.ok){
     // エラー種別を判定して表示に反映
     const emsg=(data && data.error && (data.error.message||data.error.code)) || '';
     let label;
-    if(res.status===401 || res.status===403) label='キー無効/権限';
+    if(isSarashina(provider)){
+      label = res.status===429 ? label429 : res.status===503 ? 'Sarashinaキー未設定' : res.status===404 ? '中継なし(serve.py)' : 'Sarashina HTTP '+res.status;
+    }else if(res.status===401 || res.status===403) label='キー無効/権限';
     else if(res.status===429) label = /quota|credit|billing|insufficient/i.test(emsg) ? 'トークン/クレジット不足' : 'レート制限';
     else if(res.status>=500) label='Groq側エラー';
     else label='HTTP '+res.status;
@@ -866,7 +914,7 @@ async function translateBatch(list){
 }
 
 async function translateTitlesToJa(titles){
-  if(!groqApiKey) return titles;
+  if(!translatorReady()) return titles;
   // 日本語を含まない見出しだけ翻訳対象
   let pending = titles.map((t,i)=>({t,i})).filter(o=>!hasJapanese(o.t));
   if(pending.length===0) return titles;
@@ -875,6 +923,8 @@ async function translateTitlesToJa(titles){
     let map;
     try{ map=await translateBatch(pending.map(o=>o.t)); }
     catch(e){ setApiHealth('error','接続失敗'); return result; }
+    // Sarashinaが使えない時(中継なし/キー未設定/制限)は、Groqキーがあれば1回だけ代替する
+    if(!map && isSarashina(trProvider) && groqApiKey){ try{ map=await translateBatch(pending.map(o=>o.t),'groq'); }catch(e){} }
     if(!map) break;
     pending.forEach((o,k)=>{ if(map[k+1]) result[o.i]=map[k+1]; });
     pending = pending.filter(o=>!hasJapanese(result[o.i]));
@@ -902,7 +952,7 @@ async function fetchRssNews(){
   results = results.sort((a,b)=>((b.pubts||0)-(a.pubts||0)));
 
   // JPモードで翻訳キー未設定なら、英語見出し(日本語を含まない)は除外して和文だけ残す
-  if(lang==='ja' && !groqApiKey){
+  if(lang==='ja' && !translatorReady()){
     results = results.filter(r=>hasJapanese(r.title||''));
   }
 
@@ -922,9 +972,9 @@ async function fetchRssNews(){
   results = results.slice(0,24);
 
   // JPモードかつAPIキーあり：英語見出しを日本語へ翻訳
-  if(lang==='ja' && groqApiKey){
+  if(lang==='ja' && translatorReady()){
     const translated = await translateTitlesToJa(results.map(r=>r.title));
-    results.forEach((r,i)=>{ r.title = translated[i]; });
+    results.forEach((r,i)=>{ if(translated[i]!==r.title){ r.orig=r.title; r.title=translated[i]; } }); // 原文は精度比較用に保持
     // 訳せず英語のまま残った見出しは出さない（日本語表示で英語が混ざるのを防ぐ）
     const ja = results.filter(r=>hasJapanese(r.title||''));
     if(ja.length>0) results = ja;
@@ -1039,7 +1089,8 @@ function renderNewsList(){
     const src=item.source?`<span class="news-row-source">[${escapeHtml(item.source)}]</span>`:'';
     return `<a class="news-row" href="${url}" target="_blank" rel="noopener">`
       +`<div class="news-row-meta">${src}<span class="news-row-date">${fmtNewsDate(item.pubts)}</span></div>`
-      +`<div class="news-row-title">${escapeHtml(item.title)}</div></a>`;
+      +`<div class="news-row-title">${escapeHtml(item.title)}</div>`
+      +(item.orig?`<div class="news-row-orig">${escapeHtml(item.orig)}</div>`:'')+`</a>`;
   }).join('');
 }
 

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""claude_crab を配信するローカルサーバー（バナー付き）。使い方: python3 serve.py [port]"""
+"""claude_crab を配信するローカルサーバー（バナー付き）。使い方: python3 serve.py [port]
+Sarashina API(SB Intuitions)の中継も兼ねる: POST /api/sarashina/{chat/completions,translate}
+ （ブラウザからは CORS で直接呼べないため。キーは環境変数 SARASHINA_API_KEY か secret.js の SARASHINA_KEY）"""
 import http.server
+import json
 import os
+import re
 import socketserver
 import sys
+import urllib.error
+import urllib.request
 sys.stdout.reconfigure(line_buffering=True)
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8899
@@ -28,9 +34,69 @@ CRAB = r"""
 """
 
 
+SARASHINA_BASE = "https://api.sarashina.ai/v1/"
+SARASHINA_PATHS = {"chat/completions", "translate"}
+
+
+def sarashina_key():
+    k = os.environ.get("SARASHINA_API_KEY", "").strip()
+    if k:
+        return k
+    try:
+        with open(os.path.join(ROOT, "secret.js"), encoding="utf-8") as f:
+            m = re.search(r"SARASHINA_KEY\s*=\s*['\"]([^'\"]+)['\"]", f.read())
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
+
+    def _json(self, code, obj):
+        body = json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        prefix = "/api/sarashina/"
+        if not self.path.startswith(prefix):
+            return self._json(404, {"error": "not found"})
+        path = self.path[len(prefix):].split("?")[0]
+        if path not in SARASHINA_PATHS:
+            return self._json(404, {"error": "not found"})
+        # 他サイトからのブラウザ経由の悪用を避ける: JSON以外は拒否(クロスオリジンはプリフライトで弾かれる)
+        if not (self.headers.get("Content-Type", "").startswith("application/json")):
+            return self._json(415, {"error": "json only"})
+        key = sarashina_key()
+        if not key:
+            return self._json(503, {"error": "SARASHINA key not set"})
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            n = 0
+        if n <= 0 or n > 65536:
+            return self._json(413, {"error": "bad size"})
+        req = urllib.request.Request(
+            SARASHINA_BASE + path, self.rfile.read(n),
+            {"Content-Type": "application/json", "Authorization": "Bearer " + key, "User-Agent": "claude-crab-proxy/1.0"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                code, body = r.status, r.read()
+        except urllib.error.HTTPError as e:
+            code, body = e.code, e.read()
+        except Exception as e:  # noqa: BLE001
+            return self._json(502, {"error": str(e)})
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 
 class Server(socketserver.TCPServer):
@@ -41,9 +107,10 @@ def main():
     print(f"{G}{BANNER}{CRAB}{R}")
     print(f"{G}  🦀 Claude Crab ダッシュボード用 ローカルサーバー{R}")
     print(f"{D}  配信元: {ROOT}{R}")
+    print(f"{D}  翻訳中継: Sarashina API {'キー検出 ✓' if sarashina_key() else 'キー未設定（secret.js に SARASHINA_KEY）'}{R}")
     print(f"  開く → {G}{URL}{R}")
     print(f"{D}  停止: Ctrl+C{R}\n")
-    with Server(("", PORT), Handler) as srv:
+    with Server(("127.0.0.1", PORT), Handler) as srv:
         try:
             srv.serve_forever()
         except KeyboardInterrupt:
