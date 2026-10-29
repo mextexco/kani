@@ -747,6 +747,7 @@ const RSS_FEEDS_EN = [
 // RSS取得用プロキシ（複数フォールバック）
 function rssProxyUrls(feedUrl){
   return [
+    '/api/rss?url='+encodeURIComponent(feedUrl), // serve.py の中継(最優先。無ければ下の外部中継へ)
     'https://api.allorigins.win/raw?url='+encodeURIComponent(feedUrl),
     'https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(feedUrl)+'&count=10',
     'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(feedUrl),
@@ -787,7 +788,11 @@ async function fetchOneFeed(feed){
     try{
       const opt = AbortSignal.timeout ? {signal:AbortSignal.timeout(10000)} : {};
       const res=await fetch(proxyUrl,opt);
-      if(!res.ok) continue;
+      if(!res.ok){
+        // serve.py の中継が応答した上での失敗(上流が拒否など)は、遅い外部中継に回さず諦める。中継自体が無い(404)時だけ外部へ。
+        if(proxyUrl.startsWith('/api/rss') && res.status!==404) return [];
+        continue;
+      }
       const text=await res.text();
       let items=[];
       // rss2json系はJSON

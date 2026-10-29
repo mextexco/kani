@@ -8,6 +8,8 @@ import os
 import re
 import socketserver
 import sys
+import time
+import urllib.parse
 import urllib.error
 import urllib.request
 sys.stdout.reconfigure(line_buffering=True)
@@ -50,6 +52,44 @@ def sarashina_key():
         return ""
 
 
+# RSS中継: ブラウザは多くのRSS元にCORSで直接アクセスできないため、サーバー側で取得して返す。
+# 取得を許可するのは claude_crab.html の RSS_FEEDS に書かれた url:'...' だけ(任意URLの踏み台にしない)。
+RSS_CACHE = {}          # url -> (取得時刻, ステータス, 本文)
+RSS_CACHE_SEC = 300     # 同じ元には5分に1回しか取りに行かない
+RSS_MAX_BYTES = 3 * 1024 * 1024
+
+
+def rss_allowed():
+    try:
+        with open(os.path.join(ROOT, "claude_crab.html"), encoding="utf-8") as f:
+            return set(re.findall(r"url:\s*'(https?://[^']+)'", f.read()))
+    except OSError:
+        return set()
+
+
+def fetch_rss(url):
+    hit = RSS_CACHE.get(url)
+    if hit and time.time() - hit[0] < RSS_CACHE_SEC:
+        return hit[1], hit[2]
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (claude-crab rss fetcher)",
+        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = r.read(RSS_MAX_BYTES + 1)
+            code = r.status
+    except urllib.error.HTTPError as e:
+        code, body = e.code, b""
+    if len(body) > RSS_MAX_BYTES:
+        return 502, b""
+    if code == 200 and body:
+        RSS_CACHE[url] = (time.time(), code, body)
+    elif hit:  # 取得失敗時は期限切れでも前回分を返す
+        return hit[1], hit[2]
+    return code, body
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
@@ -61,6 +101,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path.startswith("/api/rss?"):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            url = (q.get("url") or [""])[0]
+            if url not in rss_allowed():
+                return self._json(403, {"error": "feed not allowed"})
+            try:
+                code, body = fetch_rss(url)
+            except Exception as e:  # noqa: BLE001
+                return self._json(502, {"error": str(e)})
+            if code != 200:
+                return self._json(502, {"error": f"upstream {code}"})
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        return super().do_GET()
 
     def do_POST(self):
         prefix = "/api/sarashina/"
@@ -99,14 +159,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 
-class Server(socketserver.TCPServer):
+class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
+    daemon_threads = True  # RSS取得を並列にこなす（遅い元が他を塞がない）
 
 
 def main():
     print(f"{G}{BANNER}{CRAB}{R}")
     print(f"{G}  🦀 Claude Crab ダッシュボード用 ローカルサーバー{R}")
     print(f"{D}  配信元: {ROOT}{R}")
+    print(f"{D}  RSS中継: 有効（/api/rss・許可元 {len(rss_allowed())} 件）{R}")
     print(f"{D}  翻訳中継: Sarashina API {'キー検出 ✓' if sarashina_key() else 'キー未設定（secret.js に SARASHINA_KEY）'}{R}")
     print(f"  開く → {G}{URL}{R}")
     print(f"{D}  停止: Ctrl+C{R}\n")
