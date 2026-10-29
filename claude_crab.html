@@ -76,7 +76,8 @@
     .zzz { position:absolute; color:#aaaaff; font-size:16px; display:none; pointer-events:none; font-family:'Press Start 2P',monospace; animation:floatZ 1.8s steps(4) infinite; z-index:10; }
     @keyframes floatZ { 0%{opacity:0;transform:translateY(0)} 30%{opacity:1;transform:translateY(-6px)} 70%{opacity:1;transform:translateY(-16px)} 100%{opacity:0;transform:translateY(-24px)} }
     #state-label { position:absolute; top:10px; left:14px; color:#ffffff22; font-size:9px; z-index:10; }
-    #news-ticker { display:block; width:100%; background:#08081acc; color:#44ffaa; font-size:22px; padding:8px 16px; white-space:nowrap; overflow:hidden; pointer-events:auto; line-height:1.8; border-top:2px solid #1a2a4a; cursor:default; box-sizing:border-box; }
+    #news-ticker { position:relative; display:block; width:100%; background:#08081acc; color:#44ffaa; font-size:22px; padding:8px 16px; white-space:nowrap; overflow:hidden; pointer-events:auto; line-height:1.8; border-top:2px solid #1a2a4a; cursor:default; box-sizing:border-box; }
+    #brake-ind { position:absolute; right:10px; top:4px; font-family:'Press Start 2P',monospace; font-size:11px; color:#ffd27f; background:#08081acc; padding:2px 6px; display:none; z-index:2; pointer-events:none; }
     #news-ticker.ja { font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; }
     #news-ticker.en { font-family:'Press Start 2P',monospace; font-size:16px; }
     #news-ticker-inner { display:inline-block; padding-left:100%; }
@@ -213,6 +214,16 @@
     .news-row-source { color:#C96A42; font-size:10px; font-family:'Press Start 2P',monospace; }
     .news-row-date { color:#ffffff44; font-size:10px; font-family:'Press Start 2P',monospace; }
     .news-row-title { color:#ccddff; font-family:'M PLUS Rounded 1c',sans-serif; font-size:16px; font-weight:700; line-height:1.6; }
+    #news-panel-header .ptab { background:none; border:none; color:#667799; font-family:'Press Start 2P',monospace; font-size:11px; cursor:pointer; padding:4px 10px; }
+    #news-panel-header .ptab.on { color:#aaddff; border-bottom:2px solid #44ffcc; }
+    #news-panel-clear { background:none; border:none; color:#ff7777; font-family:'Press Start 2P',monospace; font-size:11px; cursor:pointer; padding:4px 10px; display:none; }
+    .saved-row { display:flex; align-items:stretch; gap:6px; background:#10101e; border-left:4px solid #ffd27f; border-radius:0 8px 8px 0; }
+    .saved-row a.news-row { flex:1; background:none; border-left:none; min-width:0; }
+    .saved-row:hover { background:#16162a; }
+    .saved-del { background:none; border:none; color:#ff7777; font-size:18px; cursor:pointer; padding:0 14px; }
+    .saved-del:hover { color:#ffaaaa; }
+    #news-ticker-inner a.news-item.saved { color:#ffd27f; border-bottom-color:#ffd27f66; }
+    #save-toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:#111128; color:#ffd27f; border:2px solid #ffd27f; padding:8px 16px; font-family:'M PLUS Rounded 1c',sans-serif; font-weight:700; font-size:14px; z-index:50; display:none; pointer-events:none; max-width:80vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #news-panel-empty { color:#ffffff33; font-size:12px; font-family:'Press Start 2P',monospace; text-align:center; padding:30px; }
   </style>
 </head>
@@ -446,8 +457,12 @@
   <!-- ニュース一覧パネル -->
   <div id="news-panel">
     <div id="news-panel-header">
-      <span>📰 NEWS LIST</span>
+      <div>
+        <button class="ptab on" id="ptab-news">📰 NEWS</button>
+        <button class="ptab" id="ptab-saved">📌 SAVED <span id="saved-count"></span></button>
+      </div>
       <button id="news-panel-reload">RELOAD</button>
+      <button id="news-panel-clear">全部削除</button>
     </div>
     <div id="news-panel-list">
       <div id="news-panel-empty">ニュース取得中... 🦀</div>
@@ -464,15 +479,6 @@
 </div>
 
 <script src="secret.js"></script>
-<script>
-// news_extra.js は毎回キャッシュを無効化して最新を読む。読み込み後にテロップを再描画。
-(function(){
-  var s=document.createElement('script');
-  s.src='news_extra.js?t='+Date.now();
-  s.onload=function(){ if(window.refreshExtraTicker) window.refreshExtraTicker(); };
-  document.head.appendChild(s);
-})();
-</script>
 <script>
 // ── 音声 ──
 let audioCtx=null;
@@ -595,6 +601,13 @@ const lastFetch=document.getElementById('last-fetch');
 const statusDot=document.getElementById('status-dot');
 const tickerInner=document.getElementById('news-ticker-inner');
 const newsTicker=document.getElementById('news-ticker');
+
+// ── あとで読む（ティッカーのクリックで保存。localStorage、この端末のブラウザ限り） ──
+const SAVED_KEY='news_saved_v1', SAVED_MAX=100;
+let savedItems=[];
+try{ savedItems=JSON.parse(localStorage.getItem(SAVED_KEY)||'[]'); if(!Array.isArray(savedItems)) savedItems=[]; }catch(e){ savedItems=[]; }
+function persistSaved(){ try{ localStorage.setItem(SAVED_KEY, JSON.stringify(savedItems)); }catch(e){} }
+function isSaved(link){ return savedItems.some(x=>x.link===link); }
 const chatInput=document.getElementById('chat-input');
 const chatSend=document.getElementById('chat-send');
 
@@ -606,11 +619,43 @@ function makeGoogleNewsUrl(title){
   return isJa ? base+'&hl=ja&gl=JP&ceid=JP:ja' : base+'&hl=en&gl=US&ceid=US:en';
 }
 
+// ── ブレーキ：Space押下中は停止、Shift+Spaceは1/3速、ティッカー上にマウスがある間も停止 ──
+// playbackRate を滑らかに補間するので、止まる/動き出すときにカクつかない。
+const brakeInd=document.createElement('div'); brakeInd.id='brake-ind'; newsTicker.appendChild(brakeInd);
+let spaceRate=1, hoverStop=false, brakeCur=1, brakeRaf=null;
+function brakeTarget(){ return spaceRate!==1 ? spaceRate : (hoverStop ? 0 : 1); }
+function applyBrakeNow(){
+  tickerInner.getAnimations().forEach(a=>{ a.playbackRate=brakeCur; });
+}
+function brakeLoop(){
+  const t=brakeTarget();
+  brakeCur += (t-brakeCur)*0.25;
+  if(Math.abs(t-brakeCur)<0.01) brakeCur=t;
+  applyBrakeNow();
+  brakeInd.style.display = t===1 ? 'none' : 'block';
+  brakeInd.textContent = t===0 ? '⏸ STOP' : '▶ SLOW';
+  brakeRaf = (brakeCur!==t) ? requestAnimationFrame(brakeLoop) : null;
+}
+function kickBrake(){ if(!brakeRaf) brakeRaf=requestAnimationFrame(brakeLoop); }
+// Space / Shift+Space（入力欄・ボタン・リンク上は無視。ボタンの誤作動も避ける）
+document.addEventListener('keydown', e=>{
+  if(e.code!=='Space') return;
+  const el=e.target;
+  if(el && el.closest && el.closest('input,textarea,select,button,a,[contenteditable]')) return;
+  e.preventDefault();
+  spaceRate = e.shiftKey ? 1/3 : 0;
+  kickBrake();
+});
+document.addEventListener('keyup', e=>{ if(e.code==='Space'){ spaceRate=1; kickBrake(); } });
+window.addEventListener('blur', ()=>{ spaceRate=1; hoverStop=false; kickBrake(); });
+newsTicker.addEventListener('mouseenter', ()=>{ hoverStop=true; kickBrake(); });
+newsTicker.addEventListener('mouseleave', ()=>{ hoverStop=false; kickBrake(); });
+
 // マーキー速度を内容幅に応じて一定(px/秒)に揃える。
 // padding-left:100%(親幅)で先頭が画面右端の外に置かれ、translateX(0)開始で即テキストが流入。
 // -100%で要素全幅(padding込み)を左へ流し切る＝末尾が画面左に抜けきり一巡完了→休憩(REST)。
 // scrollWidth は padding-left を含むので duration = scrollWidth / TICKER_SPEED で速度一定。
-const TICKER_SPEED = 160; // px/秒
+const TICKER_SPEED = 120; // px/秒
 function applyTickerSpeed(){
   requestAnimationFrame(()=>{
     const w = tickerInner.scrollWidth;
@@ -620,11 +665,12 @@ function applyTickerSpeed(){
     tickerInner.style.animation = 'none';
     void tickerInner.offsetWidth;
     tickerInner.style.animation = `ticker ${dur.toFixed(1)}s linear`;
+    applyBrakeNow(); // ブレーキ中に流れ直しても現在の速度率を引き継ぐ
   });
 }
 
 // 全ニュース一巡後の休憩。蟹が「読み終わった」感を出しつつ REST_SEC 秒空けて再開。
-const REST_SEC = 30;
+const REST_SEC = 5;
 const REST_MSGS_JA = [
   '🦀 ぜんぶ読んだ。カニ、砂に潜って休憩する…',
   '🦀 本日のニュースは完売しました。次の入荷までしばしお待ちを',
@@ -664,32 +710,18 @@ function startRest(){
 // 一巡(アニメ1回)が終わったら休憩へ。NEWS OFF中は何もしない。
 tickerInner.addEventListener('animationend', ()=>{ if(newsOn) startRest(); });
 
-// news_extra.js (Gmail/Calendarスナップショット) をテロップ先頭に混ぜるHTMLを生成。
-// 予定=📅(青)、メール=📧(黄)。RSSニュースはこの後ろに続く。
-function extraTickerHtml(){
-  if(!window.EXTRA) return '';
-  const sep='<span style="color:#ffffff33;padding:0 36px">✦</span>';
-  const parts=[];
-  (EXTRA.events||[]).forEach(e=>{
-    parts.push(`<a class="news-item" href="${escapeHtml(e.url||'#')}" target="_blank" rel="noopener" style="color:#7fdfff;border-bottom-color:#7fdfff66">📅 ${escapeHtml(e.when||'')} ${escapeHtml(e.summary||'')}</a>`);
-  });
-  (EXTRA.mails||[]).forEach(m=>{
-    parts.push(`<a class="news-item" href="${escapeHtml(m.url||'#')}" target="_blank" rel="noopener" style="color:#ffd27f;border-bottom-color:#ffd27f66">📧 [${escapeHtml(m.label||'')}] ${escapeHtml(m.subject||'')}</a>`);
-  });
-  return parts.length ? parts.join(sep)+sep : '';
-}
-
 function setTickerFromRss(items){
   clearRest();
   newsTicker.className=lang==='ja'?'ja':'en';
   if(!newsOn){ tickerInner.textContent='📡 NEWS OFF'; tickerInner.style.animation='none'; return; }
   tickerInner.style.animation='';
-  tickerInner.innerHTML = extraTickerHtml() + items.map(item=>{
+  tickerInner.innerHTML = items.map(item=>{
     const url = item.link || makeGoogleNewsUrl(item.title);
     const label = item.source ? `[${escapeHtml(item.source)}]&nbsp;${escapeHtml(item.title)}` : escapeHtml(item.title);
     const dateStr = item.pubts ? (()=>{const d=new Date(item.pubts);return `(${d.getMonth()+1}/${d.getDate()})`;})() : '';
-    return `<a class="news-item" href="${escapeHtml(url)}" target="_blank" rel="noopener">${label}${dateStr?`<span style="color:#ffffff66;font-size:0.75em;margin-left:6px">${dateStr}</span>`:''}</a>`;
-  }).join('<span style="color:#ffffff33;padding:0 36px">✦</span>');
+    const cls = isSaved(url) ? 'news-item saved' : 'news-item';
+    return `<a class="${cls}" href="${escapeHtml(url)}" target="_blank" rel="noopener" data-title="${escapeHtml(item.title)}" data-source="${escapeHtml(item.source||'')}" data-pubts="${item.pubts||0}">${label}${dateStr?`<span style="color:#ffffff66;font-size:0.75em;margin-left:6px">${dateStr}</span>`:''}</a>`;
+  }).join('<span style="color:#ffffff33;padding:0 56px">✦</span>');
   applyTickerSpeed();
 }
 
@@ -701,9 +733,9 @@ function setTicker(){
   tickerInner.style.animation='';
   const sets=lang==='ja'?NEWS_SETS_JA:NEWS_SETS_EN;
   const items=sets[newsSetIdx%sets.length];
-  tickerInner.innerHTML = extraTickerHtml() + items.map(title=>
+  tickerInner.innerHTML = items.map(title=>
     `<a class="news-item" href="${escapeHtml(makeGoogleNewsUrl(title))}" target="_blank" rel="noopener">${escapeHtml(title)}</a>`
-  ).join('<span style="color:#ffffff33;padding:0 36px">✦</span>');
+  ).join('<span style="color:#ffffff33;padding:0 56px">✦</span>');
   applyTickerSpeed();
 }
 
@@ -798,46 +830,56 @@ async function fetchOneFeed(feed){
 // 日本語(ひらがな/カタカナ/漢字)を含むか
 function hasJapanese(s){ return /[぀-ヿ㐀-鿿]/.test(s); }
 
-// 英語見出しをGroqで日本語にバッチ翻訳（1リクエストで全件）
+// 英語見出しをGroqで日本語にバッチ翻訳（1リクエストで全件）。
+// 推論型モデルは思考でトークンを使い切ると本文が空/途中切れになるため、推論を抑えて枠に余裕を持たせる。
+// 訳せなかった見出しは1回だけ再試行し、それでも残るものは呼び出し側で除外する。
+async function translateBatch(list){
+  const sp = '次のAIニュース見出しを自然で簡潔な日本語に翻訳して。固有名詞(Claude/Anthropic/OpenAI/GPT/Gemini等)は原語のまま。必ず日本語に訳し、英語のまま出力しない。各行「番号. 訳文」の形式だけを出力し、余計な説明は書かない。';
+  const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
+    body:JSON.stringify({ model:'openai/gpt-oss-20b', max_tokens:2500, temperature:0.2, reasoning_effort:'low',
+      messages:[{role:'system',content:sp},{role:'user',content:list.map((t,k)=>`${k+1}. ${t}`).join('\n')}] })
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok){
+    // エラー種別を判定して表示に反映
+    const emsg=(data && data.error && (data.error.message||data.error.code)) || '';
+    let label;
+    if(res.status===401 || res.status===403) label='キー無効/権限';
+    else if(res.status===429) label = /quota|credit|billing|insufficient/i.test(emsg) ? 'トークン/クレジット不足' : 'レート制限';
+    else if(res.status>=500) label='Groq側エラー';
+    else label='HTTP '+res.status;
+    setApiHealth('error', label);
+    return null;
+  }
+  const out=data.choices?.[0]?.message?.content?.trim();
+  if(!out){ setApiHealth('error','空応答'); return null; }
+  setApiHealth('ok', new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
+  // 「番号. 訳文」をパース
+  const map={};
+  out.split('\n').forEach(line=>{
+    const m=line.match(/^\s*(\d+)\s*[.\)、．]\s*(.+)$/);
+    if(m) map[parseInt(m[1],10)]=m[2].trim();
+  });
+  return map;
+}
+
 async function translateTitlesToJa(titles){
   if(!groqApiKey) return titles;
   // 日本語を含まない見出しだけ翻訳対象
-  const targets = titles.map((t,i)=>({t,i})).filter(o=>!hasJapanese(o.t));
-  if(targets.length===0) return titles;
-  const list = targets.map((o,k)=>`${k+1}. ${o.t}`).join('\n');
-  const sp = '次のAIニュース見出しを自然で簡潔な日本語に翻訳して。固有名詞(Claude/Anthropic/OpenAI/GPT/Gemini等)は原語のまま。各行「番号. 訳文」の形式だけを出力し、余計な説明は書かない。';
-  try{
-    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':`Bearer ${groqApiKey}`},
-      body:JSON.stringify({ model:'openai/gpt-oss-20b', max_tokens:1600, temperature:0.2,
-        messages:[{role:'system',content:sp},{role:'user',content:list}] })
-    });
-    const data=await res.json().catch(()=>({}));
-    if(!res.ok){
-      // エラー種別を判定して表示に反映
-      const emsg=(data && data.error && (data.error.message||data.error.code)) || '';
-      let label;
-      if(res.status===401 || res.status===403) label='キー無効/権限';
-      else if(res.status===429) label = /quota|credit|billing|insufficient/i.test(emsg) ? 'トークン/クレジット不足' : 'レート制限';
-      else if(res.status>=500) label='Groq側エラー';
-      else label='HTTP '+res.status;
-      setApiHealth('error', label);
-      return titles;
-    }
-    const out=data.choices?.[0]?.message?.content?.trim();
-    if(!out){ setApiHealth('error','空応答'); return titles; }
-    setApiHealth('ok', new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}));
-    // 「番号. 訳文」をパース
-    const map={};
-    out.split('\n').forEach(line=>{
-      const m=line.match(/^\s*(\d+)\s*[.\)、．]\s*(.+)$/);
-      if(m) map[parseInt(m[1],10)]=m[2].trim();
-    });
-    const result=titles.slice();
-    targets.forEach((o,k)=>{ if(map[k+1]) result[o.i]=map[k+1]; });
-    return result;
-  }catch(e){ setApiHealth('error','接続失敗'); return titles; }
+  let pending = titles.map((t,i)=>({t,i})).filter(o=>!hasJapanese(o.t));
+  if(pending.length===0) return titles;
+  const result=titles.slice();
+  for(let attempt=0; attempt<2 && pending.length>0; attempt++){
+    let map;
+    try{ map=await translateBatch(pending.map(o=>o.t)); }
+    catch(e){ setApiHealth('error','接続失敗'); return result; }
+    if(!map) break;
+    pending.forEach((o,k)=>{ if(map[k+1]) result[o.i]=map[k+1]; });
+    pending = pending.filter(o=>!hasJapanese(result[o.i]));
+  }
+  return result;
 }
 
 async function fetchRssNews(){
@@ -883,6 +925,9 @@ async function fetchRssNews(){
   if(lang==='ja' && groqApiKey){
     const translated = await translateTitlesToJa(results.map(r=>r.title));
     results.forEach((r,i)=>{ r.title = translated[i]; });
+    // 訳せず英語のまま残った見出しは出さない（日本語表示で英語が混ざるのを防ぐ）
+    const ja = results.filter(r=>hasJapanese(r.title||''));
+    if(ja.length>0) results = ja;
   }
 
   // 次回起動時の即時表示用にキャッシュ
@@ -1000,8 +1045,81 @@ function renderNewsList(){
 
 // パネルが開いていれば再描画
 function refreshNewsListIfOpen(){
-  if(newsPanel.style.display==='block') renderNewsList();
+  if(newsPanel.style.display==='block') renderPanel();
 }
+
+// ── あとで読む：保存・一覧 ──
+let panelTab='news';
+const ptabNews=document.getElementById('ptab-news');
+const ptabSaved=document.getElementById('ptab-saved');
+const savedCount=document.getElementById('saved-count');
+const newsPanelClear=document.getElementById('news-panel-clear');
+const saveToast=document.createElement('div'); saveToast.id='save-toast'; document.body.appendChild(saveToast);
+let toastTimer=null;
+function showSaveToast(msg){
+  saveToast.textContent=msg; saveToast.style.display='block';
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ saveToast.style.display='none'; },2200);
+}
+function updateSavedUI(){
+  const n=savedItems.length;
+  savedCount.textContent=n?`(${n})`:'';
+  newslistBtn.textContent = n ? `📰 LIST 📌${n}` : '📰 LIST';
+}
+function syncTickerSaved(){
+  tickerInner.querySelectorAll('a.news-item').forEach(a=>a.classList.toggle('saved', isSaved(a.href)));
+}
+function saveNews(item){
+  if(!item.link) return;
+  if(isSaved(item.link)){ showSaveToast('📌 保存済み'); return; }
+  savedItems.unshift({ title:item.title, link:item.link, source:item.source||null, pubts:item.pubts||0, savedAt:Date.now() });
+  if(savedItems.length>SAVED_MAX) savedItems.length=SAVED_MAX;
+  persistSaved(); updateSavedUI(); syncTickerSaved();
+  showSaveToast('📌 保存した: '+item.title);
+  if(newsPanel.style.display==='block' && panelTab==='saved') renderPanel();
+}
+// ティッカーの見出しクリック：新規タブは開かず保存だけする（続きを読み続けられるように）
+tickerInner.addEventListener('click', e=>{
+  const a=e.target.closest('a.news-item');
+  if(!a) return;
+  e.preventDefault();
+  saveNews({ title:a.dataset.title||a.textContent.trim(), link:a.href, source:a.dataset.source||null, pubts:parseInt(a.dataset.pubts,10)||0 });
+});
+
+function renderSavedList(){
+  if(savedItems.length===0){
+    newsPanelList.innerHTML='<div id="news-panel-empty">ティッカーの見出しをクリックすると、ここに溜まるよ 📌</div>';
+    return;
+  }
+  newsPanelList.innerHTML=savedItems.map((item,i)=>{
+    const src=item.source?`<span class="news-row-source">[${escapeHtml(item.source)}]</span>`:'';
+    const d=new Date(item.savedAt||0);
+    const when=`保存 ${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `<div class="saved-row"><a class="news-row" href="${escapeHtml(item.link)}" target="_blank" rel="noopener">`
+      +`<div class="news-row-meta">${src}<span class="news-row-date">${when}</span></div>`
+      +`<div class="news-row-title">${escapeHtml(item.title)}</div></a>`
+      +`<button class="saved-del" data-i="${i}" title="削除">×</button></div>`;
+  }).join('');
+}
+function renderPanel(){
+  const saved=panelTab==='saved';
+  ptabNews.classList.toggle('on',!saved); ptabSaved.classList.toggle('on',saved);
+  newsPanelReload.style.display=saved?'none':''; newsPanelClear.style.display=saved?'inline-block':'none';
+  if(saved) renderSavedList(); else renderNewsList();
+}
+ptabNews.onclick=()=>{ panelTab='news'; renderPanel(); };
+ptabSaved.onclick=()=>{ panelTab='saved'; renderPanel(); };
+newsPanelList.addEventListener('click', e=>{
+  const b=e.target.closest('.saved-del');
+  if(!b) return;
+  savedItems.splice(parseInt(b.dataset.i,10),1);
+  persistSaved(); updateSavedUI(); syncTickerSaved(); renderSavedList();
+});
+newsPanelClear.onclick=()=>{
+  if(savedItems.length && confirm(`保存した ${savedItems.length} 件を全部削除する？`)){
+    savedItems=[]; persistSaved(); updateSavedUI(); syncTickerSaved(); renderSavedList();
+  }
+};
+updateSavedUI();
 
 // ニュース一覧パネル開閉（ログパネルとは排他）
 newslistBtn.onclick=()=>{
@@ -1012,7 +1130,7 @@ newslistBtn.onclick=()=>{
   if(!open){
     // 他パネルを閉じる
     logPanel.style.display='none'; logBtn.className='tbtn';
-    renderNewsList();
+    renderPanel();
   }
 };
 
@@ -1525,12 +1643,6 @@ fetchWeather();
 setInterval(fetchWeather, 30*60*1000);
 
 setState('walk');
-
-// news_extra.js が遅れて読み込まれた場合にテロップ先頭のメール/予定を反映し直す
-window.refreshExtraTicker=function(){
-  if(!newsOn) return;
-  if(rssItems.length>0) setTickerFromRss(rssItems); else setTicker();
-};
 
 // 起動時：キャッシュがあれば即表示 → 裏でRSSを取得して更新
 if(!loadNewsCache()) setTicker();
