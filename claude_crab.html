@@ -546,7 +546,8 @@ trSelect.onchange=async()=>{
   trProvider=trSelect.value; try{ localStorage.setItem('tr_provider',trProvider); }catch(e){}
   updateApiStatus(); playDecide();
   try{ localStorage.removeItem('news_cache_ja'); }catch(e){}
-  if(lang==='ja' && translatorReady()){ apiStatus.textContent='⏳ 確認中…'; await doReload(true); }
+  if(translatorReady()){ apiStatus.textContent='⏳ 確認中…'; await translateTitlesToJa(['This is a test headline.']); } // 疎通確認（SAVEと同じ）
+  if(lang==='ja' && translatorReady()) doReload(true);
 };
 
 // ── 固定テキスト（2026年6月 最新ニュース） ──
